@@ -87,7 +87,8 @@ export async function fetchOpenSkyFlights(signal: AbortSignal): Promise<OpenSkyF
   try {
     response = await fetch(OPENSKY_API_URL, { signal })
   } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') throw err
+    // DOMException does not extend Error in all environments — check name directly
+    if (err !== null && typeof err === 'object' && (err as { name?: string }).name === 'AbortError') throw err
     const message = err instanceof Error ? err.message : String(err)
     return { ok: false, error: message }
   }

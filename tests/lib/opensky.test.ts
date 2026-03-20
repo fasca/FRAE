@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { parseOpenSkyState, parseOpenSkyResponse } from '@/lib/opensky'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { parseOpenSkyState, parseOpenSkyResponse, fetchOpenSkyFlights } from '@/lib/opensky'
 
 // Helper: build a valid OpenSky state array with optional overrides
 function validState(overrides: Partial<Record<number, unknown>> = {}): unknown[] {
@@ -122,5 +122,82 @@ describe('parseOpenSkyResponse', () => {
     const result = parseOpenSkyResponse(json)
     expect(result).toHaveLength(1)
     expect(result[0].icao24).toBe('abc123')
+  })
+})
+
+// Helper to mock globalThis.fetch
+function mockFetch(status: number, body: unknown): void {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.resolve(body),
+  }))
+}
+
+describe('fetchOpenSkyFlights', () => {
+  const abortController = new AbortController()
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('should_return_flights_on_successful_fetch', async () => {
+    mockFetch(200, { time: 1609459200, states: [validState()] })
+    const result = await fetchOpenSkyFlights(abortController.signal)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.flights).toHaveLength(1)
+      expect(result.flights[0].icao24).toBe('abc123')
+      expect(typeof result.timestamp).toBe('number')
+    }
+  })
+
+  it('should_return_rate_limited_error_on_429', async () => {
+    mockFetch(429, null)
+    const result = await fetchOpenSkyFlights(abortController.signal)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toBe('rate-limited')
+    }
+  })
+
+  it('should_return_error_on_500_status', async () => {
+    mockFetch(500, null)
+    const result = await fetchOpenSkyFlights(abortController.signal)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain('500')
+    }
+  })
+
+  it('should_return_error_on_network_failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Network error')))
+    const result = await fetchOpenSkyFlights(abortController.signal)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toBe('Network error')
+    }
+  })
+
+  it('should_pass_abort_signal_to_fetch', async () => {
+    const mockFn = vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve({ states: [] }) })
+    vi.stubGlobal('fetch', mockFn)
+    const controller = new AbortController()
+    await fetchOpenSkyFlights(controller.signal)
+    expect(mockFn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: controller.signal })
+    )
+  })
+
+  it('should_rethrow_abort_error', async () => {
+    const abortError = new DOMException('Aborted', 'AbortError')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(abortError))
+    const controller = new AbortController()
+    await expect(fetchOpenSkyFlights(controller.signal)).rejects.toThrow('Aborted')
   })
 })
