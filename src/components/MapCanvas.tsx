@@ -7,8 +7,10 @@ import type { FeatureCollection } from 'geojson'
 import type { GeoProjection } from 'd3-geo'
 import { createProjection, calculateZoomScale } from '@/lib/projection'
 import { drawStaticLayer, drawDynamicLayers } from '@/lib/renderer'
-import { findClosestFlight } from '@/lib/flights'
-import type { ProjectionCenter, MapOptions, Flight, Airport } from '@/types/index'
+import { findClosestFlight, interpolateFlight } from '@/lib/flights'
+import { FETCH_INTERVAL_MS } from '@/lib/opensky'
+import type { MutableRefObject } from 'react'
+import type { ProjectionCenter, MapOptions, Flight, Airport, FlightState, DataSource } from '@/types/index'
 
 interface MapCanvasProps {
   center: ProjectionCenter
@@ -20,6 +22,8 @@ interface MapCanvasProps {
   selectedIcao24: string | null
   onScaleChange: (scale: number) => void
   onFlightSelect: (icao24: string | null) => void
+  flightStatesRef?: MutableRefObject<Map<string, FlightState>>
+  dataSource?: DataSource
 }
 
 export default function MapCanvas({
@@ -32,6 +36,8 @@ export default function MapCanvas({
   selectedIcao24,
   onScaleChange,
   onFlightSelect,
+  flightStatesRef,
+  dataSource,
 }: MapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -46,6 +52,7 @@ export default function MapCanvas({
   const trailsRef = useRef(trails)
   const selectedRef = useRef(selectedIcao24)
   const optionsRef = useRef(options)
+  const dataSourceRef = useRef(dataSource)
 
   // Keep refs in sync with props (without re-rendering)
   useEffect(() => { flightsRef.current = flights }, [flights])
@@ -53,6 +60,7 @@ export default function MapCanvas({
   useEffect(() => { trailsRef.current = trails }, [trails])
   useEffect(() => { selectedRef.current = selectedIcao24 }, [selectedIcao24])
   useEffect(() => { optionsRef.current = options }, [options])
+  useEffect(() => { dataSourceRef.current = dataSource }, [dataSource])
 
   const drawStaticToOffscreen = useCallback(() => {
     const canvas = canvasRef.current
@@ -137,11 +145,18 @@ export default function MapCanvas({
       // Draw dynamic layers
       const projection = projectionRef.current
       if (projection) {
+        let liveFlights: readonly Flight[] = flightsRef.current
+        if (dataSourceRef.current === 'live' && flightStatesRef) {
+          const now = Date.now()
+          liveFlights = Array.from(flightStatesRef.current.values()).map(
+            state => interpolateFlight(state, now, FETCH_INTERVAL_MS)
+          )
+        }
         drawDynamicLayers(
           ctx,
           projection,
           airportsRef.current,
-          flightsRef.current,
+          liveFlights,
           trailsRef.current,
           selectedRef.current,
           optionsRef.current

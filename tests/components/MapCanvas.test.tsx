@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 import MapCanvas from '@/components/MapCanvas'
-import type { ProjectionCenter, MapOptions, Flight, Airport } from '@/types/index'
+import type { MutableRefObject } from 'react'
+import type { ProjectionCenter, MapOptions, Flight, Airport, FlightState } from '@/types/index'
 
 // jsdom doesn't have ResizeObserver — provide a no-op stub
 class ResizeObserverStub {
@@ -51,6 +52,16 @@ const mockOptions: MapOptions = {
 const mockFlights: readonly Flight[] = []
 const mockAirports: readonly Airport[] = []
 const mockTrails = new Map<string, [number, number][]>()
+
+const mockFlightState = (icao24 = 'abc123'): FlightState => ({
+  current: {
+    icao24, callsign: 'AF1', originCountry: 'France',
+    longitude: 2.5, latitude: 49.0, altitude: 11000,
+    velocity: 250, heading: 90, verticalRate: 0, onGround: false, lastUpdate: Date.now(),
+  },
+  previous: null,
+  lastFetchTime: Date.now(),
+})
 
 afterEach(() => {
   cleanup()
@@ -110,6 +121,61 @@ describe('MapCanvas', () => {
     unmount()
     expect(cancelSpy).toHaveBeenCalled()
     cancelSpy.mockRestore()
+  })
+
+  it('should_accept_flightStatesRef_and_dataSource_live_without_error', () => {
+    const flightStatesRef: MutableRefObject<Map<string, FlightState>> = {
+      current: new Map([['abc123', mockFlightState()]]),
+    }
+    expect(() => {
+      render(
+        <MapCanvas
+          center={mockCenter}
+          scale={250}
+          options={mockOptions}
+          flights={mockFlights}
+          airports={mockAirports}
+          trails={mockTrails}
+          selectedIcao24={null}
+          onScaleChange={vi.fn()}
+          onFlightSelect={vi.fn()}
+          flightStatesRef={flightStatesRef}
+          dataSource="live"
+        />
+      )
+    }).not.toThrow()
+  })
+
+  it('should_accept_dataSource_simulated_without_error', () => {
+    const mockFlight: Flight = {
+      icao24: 'abc123',
+      callsign: 'AF1234',
+      originCountry: 'France',
+      longitude: 2.55,
+      latitude: 49.01,
+      altitude: 10000,
+      velocity: 250,
+      heading: 90,
+      verticalRate: 0,
+      onGround: false,
+      lastUpdate: Date.now(),
+    }
+    expect(() => {
+      render(
+        <MapCanvas
+          center={mockCenter}
+          scale={250}
+          options={mockOptions}
+          flights={[mockFlight]}
+          airports={mockAirports}
+          trails={mockTrails}
+          selectedIcao24={null}
+          onScaleChange={vi.fn()}
+          onFlightSelect={vi.fn()}
+          dataSource="simulated"
+        />
+      )
+    }).not.toThrow()
   })
 
   it('should_accept_all_new_props_without_error', () => {
