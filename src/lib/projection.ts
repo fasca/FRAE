@@ -1,4 +1,4 @@
-import { geoAzimuthalEquidistant } from 'd3-geo'
+import { geoAzimuthalEquidistant, type GeoProjection } from 'd3-geo'
 import type { ProjectionCenter } from '@/types/index'
 
 /**
@@ -16,7 +16,7 @@ export function createProjection(
   width: number,
   height: number,
   scale: number
-) {
+): GeoProjection {
   return geoAzimuthalEquidistant()
     .rotate([-center.lon, -center.lat, 0])
     .translate([width / 2, height / 2])
@@ -28,7 +28,7 @@ export function createProjection(
  * Predefined projection centers for quick access to common locations
  * Includes poles, major cities, and equator for testing and UI selection
  */
-export const PREDEFINED_CENTERS: ProjectionCenter[] = [
+export const PREDEFINED_CENTERS: readonly ProjectionCenter[] = [
   { lat: 90, lon: 0, label: 'Pôle Nord' },
   { lat: 48.86, lon: 2.35, label: 'Paris' },
   { lat: 40.71, lon: -74.01, label: 'New York' },
