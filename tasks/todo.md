@@ -50,3 +50,55 @@
 ## Status: COMPLETE ✓
 
 All Phase 1 checks passed: type-check, lint, tests (29/29), build.
+
+---
+
+# Phase 2 — Simulated Flights with Animation and Info Panel
+
+## Types (`src/types/index.ts`)
+
+- [x] `Airport` interface (code, name, lat, lon)
+- [x] `SimulatedFlight` interface (flat, no nested Flight; departureTime backtracked)
+
+## Airport Database (`src/lib/airports.ts`)
+
+- [x] `AIRPORTS` — 30 major airports (CDG, JFK, LHR, NRT, LAX, DXB, SIN, FRA, AMS, PEK, SYD, GRU, JNB, MEX, BOM, ICN, YYZ, EZE, DFW, ORD, ATL, IST, MAD, BCN, MUC, ZRH, HKG, BKK, DEL, CGK)
+- [x] `getAirportByCode()`, `getRandomAirportPair()`
+
+## Flight Simulation Engine (`src/lib/flights.ts`)
+
+- [x] `generateCallsign()`, `generateIcao24()`
+- [x] `calculateHeading()` — forward azimuth via spherical trig
+- [x] `interpolatePosition()` — wraps `geoInterpolate` from d3-geo
+- [x] `generateSimulatedFlights(count)` — backtracked departureTime for correct initial progress
+- [x] `updateSimulatedFlights()` — advances progress, recycles completed flights
+- [x] `simulatedFlightToFlight()` — on-demand Flight snapshot computation
+- [x] `findClosestFlight()` — projection-based proximity search for click detection
+
+## Renderer Extensions (`src/lib/renderer.ts`)
+
+- [x] `drawAirports()` — cyan dots + IATA labels
+- [x] `drawFlightTrails()` — degressive opacity trail dots
+- [x] `drawPlanes()` — rotated triangles, orange / yellow for selected
+- [x] `drawSelectedLabel()` — callsign with semi-transparent background
+- [x] `drawDynamicLayers()` — orchestrator: trails → airports → planes → label
+
+## Components
+
+- [x] `MapCanvas.tsx`: offscreen canvas cache, RAF animation loop, prop-mirror refs, click detection, AbortController on CDN fetch
+- [x] `FlightInfoPanel.tsx`: callsign, route, altitude (m+ft), speed (m/s+kts), heading, country, close button
+- [x] `FlightRadar.tsx`: simulation state, 1s update interval, trail accumulation (useRef), selection + route state
+- [x] `StatsBar.tsx`: added flightCount prop + Phase 2 watermark
+
+## Tests
+
+- [x] `tests/lib/airports.test.ts` (9 tests)
+- [x] `tests/lib/flights.test.ts` (24 tests)
+- [x] `tests/lib/renderer.test.ts` (extended, +19 tests)
+- [x] `tests/components/MapCanvas.test.tsx` (4 tests)
+- [x] `tests/components/FlightInfoPanel.test.tsx` (5 tests)
+- [x] `tests/components/StatsBar.test.tsx` (4 tests)
+
+## Status: COMPLETE ✓
+
+All Phase 2 checks passed: type-check, lint (0 errors), tests (94/94), build.
