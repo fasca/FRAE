@@ -1,12 +1,12 @@
 /**
- * Flight simulation engine — generates and updates simulated flights along great circle routes.
+ * Flight simulation engine and interpolation utilities.
  * Uses d3-geo geoInterpolate for accurate great circle interpolation.
  * No network calls — purely computational.
  */
 import { geoInterpolate } from 'd3-geo'
 import type { GeoProjection } from 'd3-geo'
 import { getRandomAirportPair } from '@/lib/airports'
-import type { Airport, Flight, SimulatedFlight } from '@/types/index'
+import type { Airport, Flight, FlightState, SimulatedFlight } from '@/types/index'
 
 const AIRLINE_CODES = [
   'AF', 'BA', 'LH', 'AA', 'UA', 'DL', 'EK', 'QR', 'SQ', 'NH',
@@ -122,6 +122,37 @@ export function simulatedFlightToFlight(sim: SimulatedFlight): Flight {
     verticalRate: 0,
     onGround: false,
     lastUpdate: Date.now(),
+  }
+}
+
+/**
+ * Interpolate heading via shortest angular arc to handle 0/360 wrap-around.
+ * e.g., 350 → 10 at t=0.5 gives 0, not 180.
+ */
+function lerpHeading(from: number, to: number, t: number): number {
+  const delta = ((to - from + 540) % 360) - 180
+  return ((from + delta * t) + 360) % 360
+}
+
+/**
+ * Interpolate a flight position between two OpenSky fetches using great circle interpolation.
+ * Returns current position unchanged if no previous position is available.
+ * @param fetchInterval - ms between fetches (typically 10000)
+ */
+export function interpolateFlight(state: FlightState, now: number, fetchInterval: number): Flight {
+  if (!state.previous) return state.current
+  const t = Math.min(1, Math.max(0, (now - state.lastFetchTime) / fetchInterval))
+  const interp = geoInterpolate(
+    [state.previous.longitude, state.previous.latitude],
+    [state.current.longitude, state.current.latitude]
+  )
+  const [lon, lat] = interp(t)
+  return {
+    ...state.current,
+    longitude: lon,
+    latitude: lat,
+    heading: lerpHeading(state.previous.heading, state.current.heading, t),
+    altitude: state.previous.altitude + (state.current.altitude - state.previous.altitude) * t,
   }
 }
 
