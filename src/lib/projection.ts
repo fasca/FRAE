@@ -36,3 +36,18 @@ export const PREDEFINED_CENTERS: readonly ProjectionCenter[] = [
   { lat: 0, lon: 0, label: 'Équateur' },
   { lat: -90, lon: 0, label: 'Pôle Sud' },
 ]
+
+export const MIN_SCALE = 100
+export const MAX_SCALE = 1500
+export const DEFAULT_SCALE = 250
+
+const ZOOM_SENSITIVITY = 0.001
+
+export function clampScale(scale: number): number {
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale))
+}
+
+export function calculateZoomScale(currentScale: number, wheelDelta: number): number {
+  const factor = 1 - wheelDelta * ZOOM_SENSITIVITY
+  return clampScale(currentScale * factor)
+}
