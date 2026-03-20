@@ -1,0 +1,46 @@
+# ============================================
+# SECTION 1 — TOUJOURS IGNORÉ (secrets, build, perso)
+# ============================================
+.worktrees/
+node_modules/
+.next/
+out/
+dist/
+.env
+.env.local
+.env.*.local
+!.env.example
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Config locale Claude Code (clés API, préférences perso) — JAMAIS committer
+.claude/settings.local.json
+
+# ============================================
+# SECTION 2 — INFRA CLAUDE CODE COMPLÈTE
+# Décommenter si les collègues n'utilisent pas Claude Code
+# (retirer les # devant chaque ligne pour activer)
+# ============================================
+
+# --- Dossier principal Claude Code ---
+# .claude/
+
+# --- Fichiers mémoire Claude Code ---
+# CLAUDE.md
+# src/**/CLAUDE.md
+
+# --- Configuration MCP ---
+# .mcp.json
+
+# --- Dossier tasks (plans + lessons) ---
+# tasks/
+
+# --- Documentation générée pour Claude ---
+# docs/architecture.md
+# docs/decisions/
