@@ -5,7 +5,7 @@ import MapCanvas from './MapCanvas'
 import ControlPanel from './ControlPanel'
 import StatsBar from './StatsBar'
 import FlightInfoPanel from './FlightInfoPanel'
-import type { ProjectionCenter, MapOptions, Flight, SimulatedFlight } from '@/types/index'
+import type { ProjectionCenter, MapOptions, Flight, SimulatedFlight, Airport } from '@/types/index'
 import { PREDEFINED_CENTERS, DEFAULT_SCALE } from '@/lib/projection'
 import { AIRPORTS } from '@/lib/airports'
 import {
@@ -30,7 +30,7 @@ export default function FlightRadar() {
   })
   const [flights, setFlights] = useState<readonly Flight[]>([])
   const [selectedIcao24, setSelectedIcao24] = useState<string | null>(null)
-  const [selectedRoute, setSelectedRoute] = useState<{ origin: SimulatedFlight['origin']; destination: SimulatedFlight['destination'] } | null>(null)
+  const [selectedRoute, setSelectedRoute] = useState<{ origin: Airport; destination: Airport } | null>(null)
 
   const simulatedFlightsRef = useRef<SimulatedFlight[]>([])
   const trailsRef = useRef<Map<string, [number, number][]>>(new Map())
@@ -80,9 +80,8 @@ export default function FlightRadar() {
 
   const selectedFlight = flights.find(f => f.icao24 === selectedIcao24)
 
-  // Snapshot trails ref outside JSX to satisfy react-hooks/refs lint rule.
-  // Trails are intentionally stored in a ref (not state) to avoid re-renders on every trail update.
-  // eslint-disable-next-line react-hooks/refs -- trails are mutable ref data read once per render
+  // Trails are mutable ref data — reading once per render is intentional (avoids re-renders on tick)
+  // eslint-disable-next-line react-hooks/refs
   const trails = trailsRef.current
 
   return (
@@ -111,7 +110,7 @@ export default function FlightRadar() {
           flight={selectedFlight}
           origin={selectedRoute?.origin}
           destination={selectedRoute?.destination}
-          onClose={() => setSelectedIcao24(null)}
+          onClose={() => handleFlightSelect(null)}
         />
       )}
       <StatsBar
