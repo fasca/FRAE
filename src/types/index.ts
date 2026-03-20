@@ -66,3 +66,16 @@ export interface MapOptions {
   showCountryBorders: boolean
   showFlightPaths: boolean
 }
+
+/**
+ * Stores current + previous position for interpolation between OpenSky fetches.
+ * Used in a Map<string, FlightState> ref in useOpenSkyData.
+ */
+export interface FlightState {
+  current: Flight
+  previous: Flight | null
+  lastFetchTime: number
+}
+
+/** Indicates the current data source displayed to the user */
+export type DataSource = 'live' | 'simulated'
