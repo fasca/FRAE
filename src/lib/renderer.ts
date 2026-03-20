@@ -1,5 +1,6 @@
 import { geoPath, geoGraticule } from 'd3-geo'
 import type { GeoProjection, GeoPermissibleObjects } from 'd3-geo'
+import type { Airport, Flight, MapOptions } from '@/types/index'
 
 export const COLORS = {
   background: '#030a14',
@@ -96,4 +97,132 @@ export function drawStaticLayer(
   drawGraticule(ctx, path, 'thick')
   drawCountries(ctx, path, worldGeoJson)
   ctx.restore()
+}
+
+// ── Dynamic layer constants ───────────────────────────────────────────────────
+
+export const AIRPORT_DOT_RADIUS = 3
+export const AIRPORT_LABEL_FONT = '9px monospace'
+export const PLANE_SIZE = 6
+export const PLANE_SELECTED_SIZE = 8
+export const TRAIL_LENGTH = 8
+export const TRAIL_BASE_OPACITY = 0.6
+
+// ── Layer 6: Flight trails ────────────────────────────────────────────────────
+
+export function drawFlightTrails(
+  ctx: CanvasRenderingContext2D,
+  projection: GeoProjection,
+  trails: Map<string, [number, number][]>
+): void {
+  for (const positions of trails.values()) {
+    const len = positions.length
+    for (let i = 0; i < len; i++) {
+      const projected = projection(positions[i])
+      if (!projected) continue
+      const [x, y] = projected
+      const opacity = TRAIL_BASE_OPACITY * ((i + 1) / len)
+      ctx.beginPath()
+      ctx.arc(x, y, 2, 0, 2 * Math.PI)
+      ctx.fillStyle = `rgba(255, 140, 66, ${opacity})`
+      ctx.fill()
+    }
+  }
+}
+
+// ── Layer 7: Airports ─────────────────────────────────────────────────────────
+
+export function drawAirports(
+  ctx: CanvasRenderingContext2D,
+  projection: GeoProjection,
+  airports: readonly Airport[]
+): void {
+  ctx.font = AIRPORT_LABEL_FONT
+  for (const airport of airports) {
+    const projected = projection([airport.lon, airport.lat])
+    if (!projected) continue
+    const [x, y] = projected
+    ctx.beginPath()
+    ctx.arc(x, y, AIRPORT_DOT_RADIUS, 0, 2 * Math.PI)
+    ctx.fillStyle = COLORS.accentCyan
+    ctx.fill()
+    ctx.fillStyle = COLORS.accentCyan
+    ctx.fillText(airport.code, x + 5, y - 3)
+  }
+}
+
+// ── Layer 8: Planes ───────────────────────────────────────────────────────────
+
+export function drawPlanes(
+  ctx: CanvasRenderingContext2D,
+  projection: GeoProjection,
+  flights: readonly Flight[],
+  selectedIcao24: string | null
+): void {
+  for (const flight of flights) {
+    const projected = projection([flight.longitude, flight.latitude])
+    if (!projected) continue
+    const [x, y] = projected
+    const isSelected = flight.icao24 === selectedIcao24
+    const size = isSelected ? PLANE_SELECTED_SIZE : PLANE_SIZE
+    const color = isSelected ? COLORS.accentYellow : COLORS.accentOrange
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate((flight.heading * Math.PI) / 180)
+    ctx.beginPath()
+    ctx.moveTo(0, -size)
+    ctx.lineTo(size * 0.6, size * 0.5)
+    ctx.lineTo(0, 0)
+    ctx.lineTo(-size * 0.6, size * 0.5)
+    ctx.closePath()
+    ctx.fillStyle = color
+    ctx.fill()
+    ctx.restore()
+  }
+}
+
+// ── Layer 9: Selected flight label ────────────────────────────────────────────
+
+export function drawSelectedLabel(
+  ctx: CanvasRenderingContext2D,
+  projection: GeoProjection,
+  flight: Flight
+): void {
+  const projected = projection([flight.longitude, flight.latitude])
+  if (!projected) return
+  const [x, y] = projected
+  const label = flight.callsign
+  ctx.font = '11px monospace'
+  const metrics = ctx.measureText(label)
+  const padding = 4
+  const bw = metrics.width + padding * 2
+  const bh = 16
+  const bx = x - bw / 2
+  const by = y - PLANE_SELECTED_SIZE - bh - 4
+  ctx.fillStyle = 'rgba(10, 22, 40, 0.85)'
+  ctx.fillRect(bx, by, bw, bh)
+  ctx.fillStyle = COLORS.accentYellow
+  ctx.fillText(label, bx + padding, by + bh - 4)
+}
+
+// ── Composite: all dynamic layers (6-9) ──────────────────────────────────────
+
+export function drawDynamicLayers(
+  ctx: CanvasRenderingContext2D,
+  projection: GeoProjection,
+  airports: readonly Airport[],
+  flights: readonly Flight[],
+  trails: Map<string, [number, number][]>,
+  selectedIcao24: string | null,
+  options: MapOptions
+): void {
+  drawFlightTrails(ctx, projection, trails)
+  if (options.showAirports) {
+    drawAirports(ctx, projection, airports)
+  }
+  drawPlanes(ctx, projection, flights, selectedIcao24)
+  const selected = flights.find(f => f.icao24 === selectedIcao24)
+  if (selected) {
+    drawSelectedLabel(ctx, projection, selected)
+  }
 }
