@@ -35,7 +35,8 @@ describe('getAirportByCode', () => {
   it('should_return_airport_when_code_exists', () => {
     const cdg = getAirportByCode('CDG')
     expect(cdg).toBeDefined()
-    expect(cdg!.code).toBe('CDG')
+    if (!cdg) return
+    expect(cdg.code).toBe('CDG')
   })
   it('should_return_undefined_when_code_not_found', () => {
     expect(getAirportByCode('XXX')).toBeUndefined()

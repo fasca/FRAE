@@ -1,3 +1,7 @@
+/**
+ * Static airport database — 30 major international airports (IATA codes)
+ * No network calls. Used by the flight simulation engine and renderer.
+ */
 import type { Airport } from '@/types/index'
 
 export const AIRPORTS: readonly Airport[] = [
@@ -31,7 +35,7 @@ export const AIRPORTS: readonly Airport[] = [
   { code: 'BKK', name: 'Bangkok Suvarnabhumi', lat: 13.69, lon: 100.75 },
   { code: 'DEL', name: 'New Delhi Indira Gandhi', lat: 28.56, lon: 77.10 },
   { code: 'CGK', name: 'Jakarta Soekarno-Hatta', lat: -6.13, lon: 106.66 },
-] as const
+]
 
 export function getAirportByCode(code: string): Airport | undefined {
   return AIRPORTS.find(a => a.code === code)
