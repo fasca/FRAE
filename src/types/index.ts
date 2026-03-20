@@ -42,6 +42,21 @@ export interface Airport {
 }
 
 /**
+ * Simulated flight — tracks a flight along a great circle route between two airports.
+ * Progress is computed from departureTime + duration; position is interpolated on demand.
+ */
+export interface SimulatedFlight {
+  icao24: string
+  callsign: string
+  originCountry: string
+  origin: Airport
+  destination: Airport
+  progress: number       // 0-1, position along great circle
+  departureTime: number  // Date.now() when created
+  duration: number       // total flight duration in ms
+}
+
+/**
  * Map rendering options
  * Controls which map layers and features are displayed
  */
