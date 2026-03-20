@@ -34,6 +34,7 @@ export default function MapCanvas({
   onFlightSelect,
 }: MapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const worldDataRef = useRef<FeatureCollection | null>(null)
   const offscreenRef = useRef<HTMLCanvasElement | null>(null)
   const rafRef = useRef<number>(0)
@@ -63,6 +64,10 @@ export default function MapCanvas({
     const height = rect.height || canvas.offsetHeight
     if (width === 0 || height === 0) return
 
+    // Set main canvas backing-store dimensions (needed for correct sizing before first frame)
+    canvas.width = width * dpr
+    canvas.height = height * dpr
+
     // Create or resize offscreen canvas
     if (!offscreenRef.current) {
       offscreenRef.current = document.createElement('canvas')
@@ -80,9 +85,17 @@ export default function MapCanvas({
     drawStaticLayer(offCtx, projection, worldDataRef.current, width, height)
   }, [center, scale])
 
+  // Ref to call drawStaticToOffscreen from mount-only effect without adding it as a dep
+  const drawStaticToOffscreenRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    drawStaticToOffscreenRef.current = drawStaticToOffscreen
+  }, [drawStaticToOffscreen])
+
   // Animation loop — uses a ref to avoid self-reference-before-declaration lint error
   const animateRef = useRef<() => void>(() => {})
 
+  // Intentionally no dependency array — must run after every render
+  // so animateRef always captures latest refs (flightsRef, offscreenRef, etc.)
   useEffect(() => {
     animateRef.current = () => {
       const canvas = canvasRef.current
@@ -104,12 +117,18 @@ export default function MapCanvas({
       canvas.width = width * dpr
       canvas.height = height * dpr
 
-      const ctx = canvas.getContext('2d', { alpha: false })
-      if (!ctx) {
-        rafRef.current = requestAnimationFrame(animateRef.current)
-        return
+      // Get or initialize the 2d context (cached in ref to avoid per-frame allocation)
+      if (!ctxRef.current) {
+        const newCtx = canvas.getContext('2d', { alpha: false })
+        if (!newCtx) {
+          rafRef.current = requestAnimationFrame(animateRef.current)
+          return
+        }
+        ctxRef.current = newCtx
       }
+      const ctx = ctxRef.current
 
+      // canvas.width assignment above resets the transform matrix, so re-apply scale each frame
       ctx.scale(dpr, dpr)
 
       // Copy static layers from offscreen cache
@@ -146,7 +165,7 @@ export default function MapCanvas({
     drawStaticToOffscreen()
   }, [drawStaticToOffscreen])
 
-  // Load world atlas data on mount with AbortController
+  // Load world atlas data on mount with AbortController (mount-only, never re-fetched)
   useEffect(() => {
     const controller = new AbortController()
     fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json', {
@@ -158,14 +177,14 @@ export default function MapCanvas({
           topology,
           topology.objects.countries
         ) as unknown as FeatureCollection
-        drawStaticToOffscreen()
+        drawStaticToOffscreenRef.current()
       })
       .catch((err: unknown) => {
         if (err instanceof Error && err.name === 'AbortError') return
         console.error('Failed to load world atlas:', err)
       })
     return () => controller.abort()
-  }, [drawStaticToOffscreen])
+  }, [])
 
   // Mouse wheel zoom
   const handleWheel = useCallback(
