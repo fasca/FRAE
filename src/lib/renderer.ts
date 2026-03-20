@@ -107,6 +107,15 @@ export const PLANE_SIZE = 6
 export const PLANE_SELECTED_SIZE = 8
 export const TRAIL_LENGTH = 8
 export const TRAIL_BASE_OPACITY = 0.6
+export const TRAIL_DOT_RADIUS = 2
+export const LABEL_FONT = '11px monospace'
+export const LABEL_BACKGROUND_HEIGHT = 16
+export const LABEL_BASELINE_OFFSET = 4
+export const AIRPORT_LABEL_OFFSET_X = 5
+export const AIRPORT_LABEL_OFFSET_Y = -3
+export const LABEL_GAP = 4
+// For trail color with alpha: RGB components of COLORS.accentOrange (#ff8c42 = 255,140,66)
+export const TRAIL_COLOR_RGB = '255, 140, 66'
 
 // ── Layer 6: Flight trails ────────────────────────────────────────────────────
 
@@ -123,8 +132,8 @@ export function drawFlightTrails(
       const [x, y] = projected
       const opacity = TRAIL_BASE_OPACITY * ((i + 1) / len)
       ctx.beginPath()
-      ctx.arc(x, y, 2, 0, 2 * Math.PI)
-      ctx.fillStyle = `rgba(255, 140, 66, ${opacity})`
+      ctx.arc(x, y, TRAIL_DOT_RADIUS, 0, 2 * Math.PI)
+      ctx.fillStyle = `rgba(${TRAIL_COLOR_RGB}, ${opacity})`
       ctx.fill()
     }
   }
@@ -146,8 +155,7 @@ export function drawAirports(
     ctx.arc(x, y, AIRPORT_DOT_RADIUS, 0, 2 * Math.PI)
     ctx.fillStyle = COLORS.accentCyan
     ctx.fill()
-    ctx.fillStyle = COLORS.accentCyan
-    ctx.fillText(airport.code, x + 5, y - 3)
+    ctx.fillText(airport.code, x + AIRPORT_LABEL_OFFSET_X, y + AIRPORT_LABEL_OFFSET_Y)
   }
 }
 
@@ -192,17 +200,17 @@ export function drawSelectedLabel(
   if (!projected) return
   const [x, y] = projected
   const label = flight.callsign
-  ctx.font = '11px monospace'
+  ctx.font = LABEL_FONT
   const metrics = ctx.measureText(label)
   const padding = 4
   const bw = metrics.width + padding * 2
-  const bh = 16
+  const bh = LABEL_BACKGROUND_HEIGHT
   const bx = x - bw / 2
-  const by = y - PLANE_SELECTED_SIZE - bh - 4
+  const by = y - PLANE_SELECTED_SIZE - bh - LABEL_GAP
   ctx.fillStyle = 'rgba(10, 22, 40, 0.85)'
   ctx.fillRect(bx, by, bw, bh)
   ctx.fillStyle = COLORS.accentYellow
-  ctx.fillText(label, bx + padding, by + bh - 4)
+  ctx.fillText(label, bx + padding, by + bh - LABEL_BASELINE_OFFSET)
 }
 
 // ── Composite: all dynamic layers (6-9) ──────────────────────────────────────
