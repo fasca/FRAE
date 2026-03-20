@@ -3,9 +3,10 @@ import type { ProjectionCenter } from '@/types/index'
 interface StatsBarProps {
   center: ProjectionCenter
   scale: number
+  flightCount: number
 }
 
-export default function StatsBar({ center, scale }: StatsBarProps) {
+export default function StatsBar({ center, scale, flightCount }: StatsBarProps) {
   return (
     <div className="flex items-center gap-6 px-4 py-1 bg-[#0a1628] border-t border-[#1a3a5c] shrink-0 text-xs text-[#4a7a9f]">
       <span>
@@ -15,8 +16,11 @@ export default function StatsBar({ center, scale }: StatsBarProps) {
       <span>
         Zoom: <span className="text-[#c0d8f0]">{scale}</span>
       </span>
+      <span>
+        Vols: <span className="text-[#c0d8f0]">{flightCount}</span>
+      </span>
       <span className="ml-auto text-[#1a3a5c]">
-        AE FLIGHT RADAR — Phase 1
+        AE FLIGHT RADAR — Phase 2
       </span>
     </div>
   )
