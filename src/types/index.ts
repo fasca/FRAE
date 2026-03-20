@@ -52,7 +52,7 @@ export interface SimulatedFlight {
   origin: Airport
   destination: Airport
   progress: number       // 0-1, position along great circle
-  departureTime: number  // Date.now() when created
+  departureTime: number  // backtracked epoch: Date.now() - initialProgress * duration
   duration: number       // total flight duration in ms
 }
 

@@ -85,11 +85,11 @@ describe('generateSimulatedFlights', () => {
     const ids = flights.map(f => f.icao24)
     expect(new Set(ids).size).toBe(10)
   })
-  it('should_generate_flights_with_progress_between_0_and_1', () => {
+  it('should_generate_flights_with_progress_between_0_and_0_8', () => {
     const flights = generateSimulatedFlights(10)
     for (const f of flights) {
       expect(f.progress).toBeGreaterThanOrEqual(0)
-      expect(f.progress).toBeLessThanOrEqual(1)
+      expect(f.progress).toBeLessThanOrEqual(0.8)
     }
   })
   it('should_generate_flights_with_valid_airports', () => {
