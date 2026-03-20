@@ -32,6 +32,16 @@ export interface ProjectionCenter {
 }
 
 /**
+ * Airport data interface - represents a major airport in the database
+ */
+export interface Airport {
+  code: string
+  name: string
+  lat: number
+  lon: number
+}
+
+/**
  * Map rendering options
  * Controls which map layers and features are displayed
  */
