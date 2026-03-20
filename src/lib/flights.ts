@@ -63,15 +63,17 @@ export function interpolatePosition(
 export function generateSimulatedFlights(count: number): SimulatedFlight[] {
   return Array.from({ length: count }, () => {
     const [origin, destination] = getRandomAirportPair()
+    const initialProgress = Math.random() * 0.8 // start mid-flight (0–80%)
+    const duration = randomBetween(MIN_DURATION_MS, MAX_DURATION_MS)
     return {
       icao24: generateIcao24(),
       callsign: generateCallsign(),
       originCountry: origin.name.split(' ')[0], // simplified
       origin,
       destination,
-      progress: Math.random() * 0.8, // start mid-flight (0–80%)
-      departureTime: Date.now(),
-      duration: randomBetween(MIN_DURATION_MS, MAX_DURATION_MS),
+      progress: initialProgress,
+      departureTime: Date.now() - initialProgress * duration,
+      duration,
     }
   })
 }
