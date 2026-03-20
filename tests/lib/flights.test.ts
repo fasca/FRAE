@@ -20,7 +20,7 @@ const NRT: Airport = { code: 'NRT', name: 'Tokyo Narita', lat: 35.76, lon: 140.3
 describe('generateCallsign', () => {
   it('should_return_string_matching_airline_pattern', () => {
     const callsign = generateCallsign()
-    expect(callsign).toMatch(/^[A-Z]{2}\d{3,4}$/)
+    expect(callsign).toMatch(/^[A-Z]{2}\d{4}$/)
   })
   it('should_return_different_callsigns_on_successive_calls', () => {
     const callsigns = new Set(Array.from({ length: 10 }, () => generateCallsign()))

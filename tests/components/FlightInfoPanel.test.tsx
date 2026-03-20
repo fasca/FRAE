@@ -45,10 +45,10 @@ describe('FlightInfoPanel', () => {
     expect(screen.getByText(/JFK/)).toBeDefined()
   })
 
-  it('should_show_unknown_when_origin_or_destination_missing', () => {
+  it('should_show_unknown_for_both_origin_and_destination_when_missing', () => {
     render(<FlightInfoPanel flight={mockFlight} onClose={vi.fn()} />)
     const unknownElements = screen.getAllByText(/Unknown/i)
-    expect(unknownElements.length).toBeGreaterThan(0)
+    expect(unknownElements.length).toBe(2)
   })
 
   it('should_call_onClose_when_close_button_clicked', () => {

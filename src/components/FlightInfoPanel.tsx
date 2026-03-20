@@ -9,12 +9,15 @@ interface FlightInfoPanelProps {
   onClose: () => void
 }
 
+const METERS_TO_FEET = 3.28084
+const MS_TO_KNOTS = 1.94384
+
 function metersToFeet(m: number): number {
-  return Math.round(m * 3.281)
+  return Math.round(m * METERS_TO_FEET)
 }
 
 function msToKnots(ms: number): number {
-  return Math.round(ms * 1.944)
+  return Math.round(ms * MS_TO_KNOTS)
 }
 
 export default function FlightInfoPanel({
