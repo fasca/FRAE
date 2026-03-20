@@ -7,9 +7,11 @@ import {
   generateSimulatedFlights,
   updateSimulatedFlights,
   simulatedFlightToFlight,
+  findClosestFlight,
 } from '@/lib/flights'
 import { AIRPORTS } from '@/lib/airports'
-import type { Airport } from '@/types/index'
+import type { Airport, Flight } from '@/types/index'
+import type { GeoProjection } from 'd3-geo'
 
 const CDG: Airport = { code: 'CDG', name: 'Paris Charles de Gaulle', lat: 49.01, lon: 2.55 }
 const JFK: Airport = { code: 'JFK', name: 'New York JFK', lat: 40.64, lon: -73.78 }
@@ -181,5 +183,56 @@ describe('simulatedFlightToFlight', () => {
     expect(flight.altitude).toBeLessThan(15000)
     expect(flight.velocity).toBeGreaterThan(100)
     expect(flight.velocity).toBeLessThan(400)
+  })
+})
+
+describe('findClosestFlight', () => {
+  // Mock projection: [lon, lat] -> [lon * 10, lat * 10]
+  function makeMockProjection() {
+    const fn = (coords: [number, number]): [number, number] => [coords[0] * 10, coords[1] * 10]
+    return fn as unknown as GeoProjection
+  }
+
+  const flightAt: (lon: number, lat: number) => Flight = (lon, lat) => ({
+    icao24: `${lon}_${lat}`,
+    callsign: 'AF1234',
+    originCountry: 'France',
+    longitude: lon,
+    latitude: lat,
+    altitude: 10000,
+    velocity: 250,
+    heading: 90,
+    verticalRate: 0,
+    onGround: false,
+    lastUpdate: Date.now(),
+  })
+
+  it('should_return_nearest_flight_when_within_max_distance', () => {
+    const projection = makeMockProjection()
+    const flight = flightAt(5, 10) // projects to [50, 100]
+    const result = findClosestFlight([flight], projection, 50, 100, 20)
+    expect(result).not.toBeNull()
+    expect(result!.icao24).toBe('5_10')
+  })
+
+  it('should_return_null_when_no_flight_within_max_distance', () => {
+    const projection = makeMockProjection()
+    const flight = flightAt(5, 10) // projects to [50, 100]
+    const result = findClosestFlight([flight], projection, 200, 200, 10)
+    expect(result).toBeNull()
+  })
+
+  it('should_return_null_when_flights_array_is_empty', () => {
+    const projection = makeMockProjection()
+    const result = findClosestFlight([], projection, 50, 100, 20)
+    expect(result).toBeNull()
+  })
+
+  it('should_return_closest_when_multiple_flights_present', () => {
+    const projection = makeMockProjection()
+    const near = flightAt(5, 10)  // projects to [50, 100]
+    const far  = flightAt(20, 30) // projects to [200, 300]
+    const result = findClosestFlight([near, far], projection, 50, 100, 20)
+    expect(result?.icao24).toBe('5_10')
   })
 })
