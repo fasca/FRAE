@@ -88,14 +88,19 @@ export function drawStaticLayer(
   projection: GeoProjection,
   worldGeoJson: GeoPermissibleObjects,
   width: number,
-  height: number
+  height: number,
+  options: MapOptions
 ): void {
   const path = geoPath(projection, ctx)
   drawBackground(ctx, width, height)
   drawGlobe(ctx, path)
-  drawGraticule(ctx, path, 'fine')
-  drawGraticule(ctx, path, 'thick')
-  drawCountries(ctx, path, worldGeoJson)
+  if (options.showGraticule) {
+    drawGraticule(ctx, path, 'fine')
+    drawGraticule(ctx, path, 'thick')
+  }
+  if (options.showCountryBorders) {
+    drawCountries(ctx, path, worldGeoJson)
+  }
   ctx.restore()
 }
 

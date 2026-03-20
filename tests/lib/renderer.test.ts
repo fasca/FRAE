@@ -62,6 +62,21 @@ function makeMockProjection(): GeoProjection {
   return fn as unknown as GeoProjection
 }
 
+// Mock projection with D3-compatible .stream() for use with geoPath
+function makeMockProjectionWithStream(): GeoProjection {
+  const fn = makeMockProjection() as unknown as Record<string, unknown>
+  const geoStream = {
+    point: vi.fn(),
+    lineStart: vi.fn(),
+    lineEnd: vi.fn(),
+    polygonStart: vi.fn(),
+    polygonEnd: vi.fn(),
+    sphere: vi.fn(),
+  }
+  fn.stream = () => geoStream
+  return fn as unknown as GeoProjection
+}
+
 const mockAirport: Airport = { code: 'CDG', name: 'Paris Charles de Gaulle', lat: 49.01, lon: 2.55 }
 const mockFlight: Flight = {
   icao24: 'abc123',
@@ -113,7 +128,29 @@ describe('createGraticules', () => {
 describe('drawStaticLayer', () => {
   it('should_be_a_function_with_correct_arity', () => {
     expect(typeof drawStaticLayer).toBe('function')
-    expect(drawStaticLayer.length).toBe(5)
+    expect(drawStaticLayer.length).toBe(6)
+  })
+
+  it('should_not_call_stroke_when_graticule_and_borders_disabled', () => {
+    const ctx = makeMockCtx()
+    const projection = makeMockProjectionWithStream()
+    const emptyWorld = { type: 'FeatureCollection', features: [] }
+    const options: MapOptions = {
+      showAirports: true, showGraticule: false, showCountryBorders: false, showFlightPaths: false,
+    }
+    drawStaticLayer(ctx, projection, emptyWorld as unknown as import('d3-geo').GeoPermissibleObjects, 800, 600, options)
+    expect(ctx.stroke).not.toHaveBeenCalled()
+  })
+
+  it('should_call_stroke_when_showGraticule_is_true', () => {
+    const ctx = makeMockCtx()
+    const projection = makeMockProjectionWithStream()
+    const emptyWorld = { type: 'FeatureCollection', features: [] }
+    const options: MapOptions = {
+      showAirports: true, showGraticule: true, showCountryBorders: false, showFlightPaths: false,
+    }
+    drawStaticLayer(ctx, projection, emptyWorld as unknown as import('d3-geo').GeoPermissibleObjects, 800, 600, options)
+    expect(ctx.stroke).toHaveBeenCalled()
   })
 })
 

@@ -156,6 +156,18 @@ export function interpolateFlight(state: FlightState, now: number, fetchInterval
   }
 }
 
+/**
+ * Filter flights by callsign or origin country (case-insensitive).
+ * Returns all flights when query is empty.
+ */
+export function filterFlights(flights: readonly Flight[], query: string): readonly Flight[] {
+  if (!query.trim()) return flights
+  const q = query.toLowerCase()
+  return flights.filter(
+    f => f.callsign.toLowerCase().includes(q) || f.originCountry.toLowerCase().includes(q)
+  )
+}
+
 export function findClosestFlight(
   flights: readonly Flight[],
   projection: GeoProjection,

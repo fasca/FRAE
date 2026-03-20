@@ -23,6 +23,9 @@ const IDX_VELOCITY        = 9
 const IDX_TRUE_TRACK      = 10
 const IDX_VERTICAL_RATE   = 11
 
+/** Minimum interval between OpenSky API requests (anonymous mode rate limit) */
+export const FETCH_INTERVAL_MS = 10_000
+
 /**
  * Parse a single OpenSky state array into a Flight object.
  * Returns null if coordinates are missing or icao24 is not a string.

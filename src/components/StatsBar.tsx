@@ -39,7 +39,7 @@ export default function StatsBar({ center, scale, flightCount, lastUpdate, dataS
         MAJ: <span className="text-[#c0d8f0]">{lastUpdate !== null ? formatTime(lastUpdate) : '---'}</span>
       </span>
       <span className="ml-auto text-[#1a3a5c]">
-        AE FLIGHT RADAR — Phase 3
+        AE FLIGHT RADAR — Phase 4
       </span>
     </div>
   )

@@ -149,3 +149,53 @@ All Phase 2 checks passed: type-check, lint (0 errors), tests (94/94), build.
 ## Status: COMPLETE ✓
 
 All Phase 3 checks passed: type-check, lint (0 errors), tests (142/142), build.
+
+---
+
+# Phase 4 — Polish
+
+## Responsive mobile
+
+- [x] `src/app/page.tsx`: `h-screen` → `h-dvh` pour iOS Safari
+
+## Toggles d'options (`src/components/ControlPanel.tsx`, `src/lib/renderer.ts`, `src/components/MapCanvas.tsx`)
+
+- [x] `drawStaticLayer()` accepte `options: MapOptions` (graticule + bordures conditionnels)
+- [x] `MapCanvas.tsx`: passe `options` à `drawStaticLayer`, ajout aux deps du useCallback
+- [x] `ControlPanel.tsx`: 4 boutons toggle (Aéro, Grille, Pays, Traînées) — actif/inactif
+- [x] `ControlPanel.tsx`: props `options` + `onOptionsChange` activées (retrait des `_`)
+
+## Filtre callsign / pays
+
+- [x] `src/lib/flights.ts`: `filterFlights(flights, query)` — pure, case-insensitive
+- [x] `src/components/ControlPanel.tsx`: input texte (filterQuery + onFilterChange)
+- [x] `src/components/FlightRadar.tsx`: état filterQuery, filteredFlights, flightCount filtré
+
+## Drag-to-recenter (`src/components/MapCanvas.tsx`)
+
+- [x] Pointer events (down/move/up) avec seuil 5px pour distinguer clic de drag
+- [x] `projection.invert()` → `onCenterChange({ lat, lon, label: 'Custom' })`
+- [x] `canvas.setPointerCapture?.()` (graceful degradation jsdom)
+
+## Export PNG (`src/components/MapCanvas.tsx`, `ControlPanel.tsx`, `FlightRadar.tsx`)
+
+- [x] `exportRef` — fonction qui composite static + dynamic layers → `toDataURL` → download
+- [x] Bouton "PNG" dans ControlPanel (onExport optionnel)
+- [x] `FlightRadar.tsx`: `exportRef` passé à MapCanvas, callback à ControlPanel
+
+## Finalisation
+
+- [x] `StatsBar.tsx`: watermark "Phase 4"
+- [x] `src/lib/opensky.ts`: export `FETCH_INTERVAL_MS = 10_000` (manquait depuis Phase 3)
+
+## Tests
+
+- [x] `tests/lib/renderer.test.ts`: arity 5→6, +2 tests options (stroke conditionnel)
+- [x] `tests/components/ControlPanel.test.tsx`: refacto avec defaultProps, +5 tests (toggles, filtre, export)
+- [x] `tests/lib/flights.test.ts`: +5 tests filterFlights
+- [x] `tests/components/MapCanvas.test.tsx`: +3 tests (onCenterChange, exportRef, pointerup)
+- [x] `tests/components/StatsBar.test.tsx`: Phase 3 → Phase 4 test
+
+## Status: COMPLETE ✓
+
+All Phase 4 checks passed: type-check, lint (0 errors), tests (158/158), build.

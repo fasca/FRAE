@@ -22,9 +22,9 @@ describe('StatsBar', () => {
     expect(screen.getByText(/80/)).toBeDefined()
   })
 
-  it('should_render_phase_3_indicator', () => {
+  it('should_render_phase_4_indicator', () => {
     render(<StatsBar {...defaultProps} />)
-    expect(screen.getByText(/Phase 3/i)).toBeDefined()
+    expect(screen.getByText(/Phase 4/i)).toBeDefined()
   })
 
   it('should_render_live_indicator_when_data_source_is_live', () => {

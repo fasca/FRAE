@@ -22,8 +22,10 @@ interface MapCanvasProps {
   selectedIcao24: string | null
   onScaleChange: (scale: number) => void
   onFlightSelect: (icao24: string | null) => void
+  onCenterChange?: (center: ProjectionCenter) => void
   flightStatesRef?: MutableRefObject<Map<string, FlightState>>
   dataSource?: DataSource
+  exportRef?: MutableRefObject<(() => void) | null>
 }
 
 export default function MapCanvas({
@@ -36,8 +38,10 @@ export default function MapCanvas({
   selectedIcao24,
   onScaleChange,
   onFlightSelect,
+  onCenterChange,
   flightStatesRef,
   dataSource,
+  exportRef,
 }: MapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -45,6 +49,10 @@ export default function MapCanvas({
   const offscreenRef = useRef<HTMLCanvasElement | null>(null)
   const rafRef = useRef<number>(0)
   const projectionRef = useRef<GeoProjection | null>(null)
+
+  // Refs for drag-to-recenter
+  const isDraggingRef = useRef(false)
+  const dragStartRef = useRef<[number, number]>([0, 0])
 
   // Refs for animation loop to avoid stale closures
   const flightsRef = useRef(flights)
@@ -90,8 +98,8 @@ export default function MapCanvas({
     offCtx.scale(dpr, dpr)
     const projection = createProjection(center, width, height, scale)
     projectionRef.current = projection
-    drawStaticLayer(offCtx, projection, worldDataRef.current, width, height)
-  }, [center, scale])
+    drawStaticLayer(offCtx, projection, worldDataRef.current, width, height, options)
+  }, [center, scale, options])
 
   // Ref to call drawStaticToOffscreen from mount-only effect without adding it as a dep
   const drawStaticToOffscreenRef = useRef<() => void>(() => {})
@@ -218,27 +226,98 @@ export default function MapCanvas({
     return () => canvas.removeEventListener('wheel', handleWheel)
   }, [handleWheel])
 
-  // Click handler for flight selection
-  const handleClick = useCallback(
-    (e: MouseEvent) => {
-      const canvas = canvasRef.current
-      const projection = projectionRef.current
-      if (!canvas || !projection) return
-      const rect = canvas.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const y = e.clientY - rect.top
-      const found = findClosestFlight(flightsRef.current, projection, x, y, 15)
-      onFlightSelect(found?.icao24 ?? null)
-    },
-    [onFlightSelect]
-  )
+  const onCenterChangeRef = useRef(onCenterChange)
+  useEffect(() => { onCenterChangeRef.current = onCenterChange }, [onCenterChange])
+
+  const onFlightSelectRef = useRef(onFlightSelect)
+  useEffect(() => { onFlightSelectRef.current = onFlightSelect }, [onFlightSelect])
+
+  // Pointer handlers: distinguish click (flight select) from drag (recenter)
+  const handlePointerDown = useCallback((e: PointerEvent) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    canvas.setPointerCapture?.(e.pointerId)
+    const rect = canvas.getBoundingClientRect()
+    dragStartRef.current = [e.clientX - rect.left, e.clientY - rect.top]
+    isDraggingRef.current = false
+  }, [])
+
+  const handlePointerMove = useCallback((e: PointerEvent) => {
+    const canvas = canvasRef.current
+    if (!canvas || !(e.buttons & 1)) return
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const [sx, sy] = dragStartRef.current
+    const dist = Math.sqrt((x - sx) ** 2 + (y - sy) ** 2)
+    if (dist > 5) {
+      isDraggingRef.current = true
+      canvas.style.cursor = 'grabbing'
+    }
+  }, [])
+
+  const handlePointerUp = useCallback((e: PointerEvent) => {
+    const canvas = canvasRef.current
+    const projection = projectionRef.current
+    if (!canvas) return
+    canvas.style.cursor = ''
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    if (isDraggingRef.current && projection && onCenterChangeRef.current) {
+      const coords = projection.invert?.([x, y])
+      if (coords) {
+        const [lon, lat] = coords
+        onCenterChangeRef.current({ lat, lon, label: 'Custom' })
+      }
+    } else {
+      const found = findClosestFlight(flightsRef.current, projection!, x, y, 15)
+      onFlightSelectRef.current(found?.icao24 ?? null)
+    }
+    isDraggingRef.current = false
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    canvas.addEventListener('click', handleClick)
-    return () => canvas.removeEventListener('click', handleClick)
-  }, [handleClick])
+    canvas.addEventListener('pointerdown', handlePointerDown)
+    canvas.addEventListener('pointermove', handlePointerMove)
+    canvas.addEventListener('pointerup', handlePointerUp)
+    return () => {
+      canvas.removeEventListener('pointerdown', handlePointerDown)
+      canvas.removeEventListener('pointermove', handlePointerMove)
+      canvas.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [handlePointerDown, handlePointerMove, handlePointerUp])
+
+  // Export to PNG: composite static + dynamic layers into a temp canvas
+  useEffect(() => {
+    if (!exportRef) return
+    exportRef.current = () => {
+      const canvas = canvasRef.current
+      const offscreen = offscreenRef.current
+      const projection = projectionRef.current
+      if (!canvas || !offscreen || !projection) return
+      const dpr = window.devicePixelRatio || 1
+      const rect = canvas.getBoundingClientRect()
+      const width = rect.width || canvas.offsetWidth
+      const height = rect.height || canvas.offsetHeight
+      const tmp = document.createElement('canvas')
+      tmp.width = width * dpr
+      tmp.height = height * dpr
+      const tmpCtx = tmp.getContext('2d')
+      if (!tmpCtx) return
+      tmpCtx.scale(dpr, dpr)
+      tmpCtx.drawImage(offscreen, 0, 0, width, height)
+      drawDynamicLayers(tmpCtx, projection, airportsRef.current, flightsRef.current, trailsRef.current, selectedRef.current, optionsRef.current)
+      const url = tmp.toDataURL('image/png')
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'frae-export.png'
+      a.click()
+    }
+    return () => { if (exportRef) exportRef.current = null }
+  })
 
   // Resize observer
   useEffect(() => {

@@ -211,4 +211,64 @@ describe('MapCanvas', () => {
       )
     }).not.toThrow()
   })
+
+  it('should_accept_onCenterChange_prop_without_error', () => {
+    expect(() => {
+      render(
+        <MapCanvas
+          center={mockCenter}
+          scale={250}
+          options={mockOptions}
+          flights={mockFlights}
+          airports={mockAirports}
+          trails={mockTrails}
+          selectedIcao24={null}
+          onScaleChange={vi.fn()}
+          onFlightSelect={vi.fn()}
+          onCenterChange={vi.fn()}
+        />
+      )
+    }).not.toThrow()
+  })
+
+  it('should_accept_exportRef_prop_without_error', () => {
+    const exportRef = { current: null }
+    expect(() => {
+      render(
+        <MapCanvas
+          center={mockCenter}
+          scale={250}
+          options={mockOptions}
+          flights={mockFlights}
+          airports={mockAirports}
+          trails={mockTrails}
+          selectedIcao24={null}
+          onScaleChange={vi.fn()}
+          onFlightSelect={vi.fn()}
+          exportRef={exportRef}
+        />
+      )
+    }).not.toThrow()
+  })
+
+  it('should_call_onFlightSelect_with_null_on_pointerup_with_no_nearby_flight', () => {
+    const onFlightSelect = vi.fn()
+    const { container } = render(
+      <MapCanvas
+        center={mockCenter}
+        scale={250}
+        options={mockOptions}
+        flights={mockFlights}
+        airports={mockAirports}
+        trails={mockTrails}
+        selectedIcao24={null}
+        onScaleChange={vi.fn()}
+        onFlightSelect={onFlightSelect}
+      />
+    )
+    const canvas = container.querySelector('canvas')!
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 100, clientY: 100, bubbles: true }))
+    canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 100, clientY: 100, bubbles: true }))
+    expect(onFlightSelect).toHaveBeenCalledWith(null)
+  })
 })

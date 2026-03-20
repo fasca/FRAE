@@ -9,6 +9,7 @@ import {
   simulatedFlightToFlight,
   findClosestFlight,
   interpolateFlight,
+  filterFlights,
 } from '@/lib/flights'
 import { AIRPORTS } from '@/lib/airports'
 import type { Airport, Flight, FlightState } from '@/types/index'
@@ -316,5 +317,45 @@ describe('interpolateFlight', () => {
     const state = makeFlightState(0, 0, 0, 10000, 0.1, 0.1, 0, 12000, 1000)
     const result = interpolateFlight(state, 1000 + INTERVAL / 2, INTERVAL)
     expect(result.altitude).toBeCloseTo(11000, 0)
+  })
+})
+
+const makeFlight = (icao24: string, callsign: string, originCountry: string): Flight => ({
+  icao24, callsign, originCountry,
+  longitude: 0, latitude: 0, altitude: 10000, velocity: 250,
+  heading: 0, verticalRate: 0, onGround: false, lastUpdate: Date.now(),
+})
+
+describe('filterFlights', () => {
+  const flights: readonly Flight[] = [
+    makeFlight('abc', 'AF1234', 'France'),
+    makeFlight('def', 'LH5678', 'Germany'),
+    makeFlight('ghi', 'BA9012', 'United Kingdom'),
+  ]
+
+  it('should_return_all_flights_when_query_is_empty', () => {
+    expect(filterFlights(flights, '')).toHaveLength(3)
+  })
+
+  it('should_filter_by_callsign', () => {
+    const result = filterFlights(flights, 'AF')
+    expect(result).toHaveLength(1)
+    expect(result[0].callsign).toBe('AF1234')
+  })
+
+  it('should_filter_by_country', () => {
+    const result = filterFlights(flights, 'germany')
+    expect(result).toHaveLength(1)
+    expect(result[0].originCountry).toBe('Germany')
+  })
+
+  it('should_be_case_insensitive', () => {
+    expect(filterFlights(flights, 'france')).toHaveLength(1)
+    expect(filterFlights(flights, 'FRANCE')).toHaveLength(1)
+    expect(filterFlights(flights, 'lh')).toHaveLength(1)
+  })
+
+  it('should_return_empty_when_no_match', () => {
+    expect(filterFlights(flights, 'zzz')).toHaveLength(0)
   })
 })
