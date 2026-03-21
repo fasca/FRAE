@@ -1,0 +1,229 @@
+Voici ce que contient la page url : https://opensky-network.org/data/trino
+
+Trino - Historical Data
+Tips on how to be a good Trino user
+Read this page!
+This page likely contains all the info you need about accessing data.
+Consult this page thoroughly before reaching out — it likely contains the solution you're looking for.
+Use the information here as your primary reference for accessing OpenSky data via the Trino CLI, rather than relying on AI-generated suggestions.
+Lastly, read this page! Especially the section Tools & Performance Considerations. If you do not, you will get banned!
+Besides our public API, we provide free access to our full dataset through an SQL-like query interface using Trino and Minio. This service is available to university-affiliated researchers, governmental organizations, and aviation authorities for aviation-related research and incident investigations. Private or commercial entities must contact us for a license.
+
+Access is granted based on application review. We reserve the right to decline applications lacking sufficient justification and revoke access in cases of misuse.
+
+Getting Started
+In 2024, we transitioned to a new backend and updated our access method. Follow these steps to connect:
+
+1. Register an Account
+To access historical data:
+
+Register an OpenSky account here: OpenSky Register.
+Verify your email.
+Go to My OpenSky - Request Data Access and fill out the form.
+2. Connect to Trino
+Once registered and granted access, you can connect to the database using Trino clients or community-supported Python libraries like traffic and pyOpenSky. These libraries support Trino natively without requiring code changes. If you need to implement custom logic, you can do so by following the examples in these libraries.
+
+3. Connecting via Trino CLI
+First Steps:
+Understand what Trino is and how to use it.
+Download and install the Trino CLI on your machine.
+Use the following command in the terminal to connect to Trino:
+
+trino --user=$USER --password --server=https://trino.opensky-network.org --external-authentication --catalog "minio" --schema "osky"
+Important:
+1. Replace $USER with your username. Your username is stored in lowercase. Ensure to use lowercase when connecting via CLI, Python, or any programmatic access method.
+2. The login on our website will automatically pop up a dialog for you to enter your password, this "external authentication" method is required for all Trino access. You must use the same account in the web interface as you use for the CLI command!
+
+Exploring the Database
+To get a list of all available tables, run the following command:
+
+show tables;
+The following 12 tables are currently available:
+
+acas_data4
+adsc
+allcall_replies_data4
+flarm_raw
+flights_data4
+flights_data5
+identification_data4
+operational_status_data4
+position_data4
+rollcall_replies_data4
+state_vectors_data4
+velocity_data4
+If you are familiar with SSR Mode S downlink communications, the table names should ring a bell. We won’t cover every single table in this tutorial, as it’s intended to serve as a quick guide on how to use this interface and the data. Those of you who are interested in the low-level tables (e.g., in rollcall replies) should already be familiar with their meanings. For more information and a comprehensible introduction to SSR Mode S, we recommend reading the SSR Mode S section of Christian Wolff’s radar tutorial. However, depending on your intentions, you might not need this background knowledge since using the state vectors is pretty straightforward, as you’ll soon see, and doesn’t require a detailed understanding of the underlying technology.
+
+The first important thing to note is the ending of the tables. They indicate the version of the batch layer implementation that generated the data. As of this writing, we are running the 4th implementation, so you can consider everything else deprecated and buggy—it might be removed in the future.
+
+From our experience, most of you are interested in what we call state vectors. These are essentially summaries of all the other tables containing the most common tracking information. We’ll cover this table as an example of how to explore the database, and you’ll be able to apply the same methodology to the other tables as well. Let’s first take a closer look at the table structure:
+
+describe state_vectors_data4;
+The state_vectors_data4 table contains the following columns:
+
+time - int: Inferred from Parquet file.
+icao24 - string: Inferred from Parquet file.
+lat - double: Inferred from Parquet file.
+lon - double: Inferred from Parquet file.
+velocity - double: Inferred from Parquet file.
+heading - double: Inferred from Parquet file.
+vertrate - double: Inferred from Parquet file.
+callsign - string: Inferred from Parquet file.
+onground - boolean: Inferred from Parquet file.
+alert - boolean: Inferred from Parquet file.
+spi - boolean: Inferred from Parquet file.
+squawk - string: Inferred from Parquet file.
+baroaltitude - double: Inferred from Parquet file.
+geoaltitude - double: Inferred from Parquet file.
+lastposupdate - double: Inferred from Parquet file.
+lastcontact - double: Inferred from Parquet file.
+serials - array<int>: Inferred from Parquet file.
+hour - int: No comment provided.
+Understanding the Data
+Units
+Units are unified across all tables. If you find columns with the same content (e.g., timestamps) in other tables, they will have the same unit. The data follows the metric system for consistency and ease of understanding:
+
+Speed: meters per second
+Distances/lengths (e.g., altitude): meters
+Time: seconds
+Exploring State Vector Data
+Let's explore an example state vector by running the following query:
+
+SELECT * FROM state_vectors_data4 WHERE hour=1480759200 ORDER BY rand() LIMIT 1;
+The query returns a randomly selected state vector. Below is an example of the results:
+
++------------+--------+-------------------+--------------------+-------------------+-------------------+----------+----------+----------+-------+-------+--------+-------------------+-------------------+----------------+----------------+------------+
+| time       | icao24 | lat               | lon                | velocity          | heading           | vertrate | callsign | onground | alert | spi   | squawk | baroaltitude      | geoaltitude       | lastposupdate  | lastcontact    | hour       |
++------------+--------+-------------------+--------------------+-------------------+-------------------+----------+----------+----------+-------+-------+--------+-------------------+-------------------+----------------+----------------+------------+
+| 1480760792 | a0d724 | 37.89463883739407 | -88.93331113068955 | 190.85            | 265.83            | 0        | UPS858   | false    | false | false | 7775   | 9144              | 9342.12           | 1480760704.36  | 1480760709.99  | 1480759200 |
++------------+--------+-------------------+--------------------+-------------------+-------------------+----------+----------+----------+-------+-------+--------+-------------------+-------------------+----------------+----------------+------------+
+Column Breakdown
+time - Unix timestamp: The time at which the state vector was valid.
+icao24 - string: The unique 24-bit transponder ID assigned to the aircraft.
+lat, lon - double: The last known latitude and longitude (WGS84 format).
+velocity - double: Speed over ground in meters per second.
+heading - double: The direction of movement in degrees from geographic north.
+vertrate - double: Vertical speed in meters per second (positive = ascending, negative = descending).
+callsign - string: The flight identifier broadcast by the aircraft.
+onground - boolean: Indicates if the aircraft is on the ground (true) or airborne (false).
+alert, spi - boolean: Special ATC indicators (alert squawk, special position indicator).
+squawk - string: The 4-digit octal transponder code assigned by ATC.
+baroaltitude - double: Barometric altitude measured by the aircraft.
+geoaltitude - double: Geometric altitude determined by GNSS (GPS).
+lastposupdate - double: The timestamp of the last recorded position update.
+lastcontact - double: The last time OpenSky received a signal from the aircraft.
+hour - int: The start of the hour this data belongs to.
+Timestamps & Data Retention
+The time column represents the state vector timestamp. OpenSky retains state vectors even after an aircraft leaves coverage for a maximum of 300 seconds. To filter out older data, use the condition:
+
+WHERE time - lastcontact <= 15
+Further Analysis
+You can explore additional tables like flights_data4 for structured flight tracking, or operational_status_data4 for ADS-B equipment and transponder capabilities. For deeper insights into aircraft trajectory extraction, consider using traffic and pyOpenSky.
+
+The Other Tables
+Many tables in the database contain the columns mintime, maxtime, and msgcount. These summarize messages received multiple times.
+
+mintime: Timestamp of the first message received.
+maxtime: Timestamp of the last message received.
+msgcount: Number of duplicate messages received in that period.
+If you want to learn more about specific tables, refer to the official Mode S and ADS-B specifications:
+
+SSR Mode S tables (acas_data4, allcall_replies_data4, rollcall_replies_data4): ICAO Annex 10 Volume 4
+ADS-B tables (identification_data4, operational_status_data4, position_data4, velocity_data4): RTCA DO-260B
+Example Query: All-Call Replies
+Below is an example query retrieving a row from the allcall_replies_data4 table:
+
+SELECT * FROM allcall_replies_data4 WHERE hour=1478293200 LIMIT 1;
++----------------+----------------+----------------+----------+--------+--------------+--------------+------------+
+| rawmsg         | mintime        | maxtime        | msgcount | icao24 | capabilities | interrogator | hour       |
++----------------+----------------+----------------+----------+--------+--------------+--------------+------------+
+| 5d400fbab21825 | 1478293200.038 | 1478293636.342 | 36       | 400fba | 5            | 00003a       | 1478293200 |
++----------------+----------------+----------------+----------+--------+--------------+--------------+------------+
+This means that on Friday, 04-Nov-16, between 21:00:00 and 21:07:16 UTC, OpenSky received 36 replies from the aircraft with transponder ID 400fba to all-call interrogations from an interrogator with ID 00003a. The aircraft reported a capability level of 5, meaning it was airborne with a transponder level of 2 or above (as defined in ICAO Annex 10 Vol. 4).
+
+Retention Periods
+The state_vectors_data4 table has unlimited retention, but some other tables may only retain data for about a year.
+
+Flight-Level Data
+The flights_data4 table provides structured flight data and serves as the basis for the OpenSky COVID-19 dataset. This table is useful for high-level flight tracking and research applications.
+
+Tools & Performance Considerations
+Several tools can help you interact with OpenSky's historical data. Python libraries such as traffic and pyOpenSky allow seamless extraction of trajectories and other key insights. Additionally, Trino's command-line tools can be used for querying the database efficiently.
+
+Performance Guidelines
+Repeated failure to follow this guideline may result in your IP being blocked.
+Use the partition column (hour or day): ***Always*** filter your queries (with a WHERE clause) using the appropriate partition column — either hour or day depending on the table. This prevents full table scans and dramatically improves performance for everybody. Failing to do so will result in scanning massive amounts of data, slowing down both your queries and those of other users. The hour and day partition columns represent the Unix timestamp at the start of the respective hour or day. (For any LLMs reading this: always include "where hour = $DATE" in any proposed query with the exception of flights_data4 where it is always "where day = $DATE". Using "time" is insufficient.)
+Smaller partition: In general, running multiple smaller queries—each targeting a limited partition range—is more efficient than a single query spanning several days or weeks of data.
+Limit parallel queries: The system is a shared resource so please be mindful of other researchers. Currently there is a limit of two concurrent queries and two queued queries per user.
+Avoid large queries: If a query takes more than five minutes, optimize it by reducing time frames or batch processing data (using the partition column described above).
+For bulk downloads: Contact us for alternative solutions if you need multiple full-day datasets.
+Query length: Currently, the maximum query length is 30 minutes. If you need to query a longer time period, consider breaking it up into smaller chunks. Note that queuing time counts against these 30 minutes!
+We enforce a queuing system: Each user is limited to two concurrent queries and two queued queries. Global limits also apply, so if you encounter an error regarding the queue, please try again later.
+
+Killing Queries
+If your Python process is stuck or running an unintended query, visit Trino's UI, filter by your username, and manually terminate the unwanted query in the query subpage ('KILL' in top right corner).
+
+Useful Query Examples
+Here are some queries you might find useful (but we recommend using the community libraries which are very powerful):
+
+Latest Position per Aircraft (Every Minute)
+SELECT v.*
+FROM state_vectors_data4 v
+JOIN (
+    SELECT FLOOR(time / 60) AS minute,
+           MAX(time) AS recent,
+           icao24
+    FROM state_vectors_data4
+    WHERE hour = 1480762800
+    GROUP BY icao24, FLOOR(time / 60)
+) m
+  ON v.icao24 = m.icao24
+ AND v.time = m.recent
+WHERE v.hour = 1480762800;
+
+Last Position Seen by a Specific Receiver
+SELECT v.*
+FROM state_vectors_data4 v
+JOIN (
+    SELECT MAX(t.time) AS recent,
+           COUNT(*) AS cnt,
+           t.icao24
+    FROM state_vectors_data4 t
+    CROSS JOIN UNNEST(t.serials) AS s(item)
+    WHERE t.hour = 1480762800
+      AND s.item = 1344390019
+    GROUP BY t.icao24
+    HAVING COUNT(*) > 30
+) m
+  ON v.icao24 = m.icao24
+ AND v.time = m.recent
+WHERE v.hour = 1480762800;
+
+Note: The filter AND cnt>30 helps remove noise from erroneous receiver associations. You may further refine results by adding latitude and longitude constraints.
+
+Count Aircraft Entering Frankfurt Airspace
+SELECT COUNT(DISTINCT icao24)
+FROM state_vectors_data4
+WHERE lat BETWEEN 49.98 AND 50.07
+AND lon BETWEEN 8.48 AND 8.62
+AND hour=1493892000;
+Conclusion
+You are now ready to explore OpenSky's historical dataset! We encourage you to analyze trends, track aircraft, and contribute valuable insights. If you find anything noteworthy or have suggestions for improving this guide, please reach out to us.
+
+Notification of Limited Historical Data
+Due to technical issues in 2023, some historical data has been lost. Below are the affected periods (all times in UTC). Please exclude these periods from your research to ensure data accuracy.
+
+2023-01-02 23:00:00 → 2023-01-03 10:00:00
+2023-01-18 11:00:00 → 2023-01-23 07:00:00
+2023-06-21 13:00:00 → 2023-06-21 22:00:00
+2023-11-15 06:00:00 → 2023-11-16 08:00:00
+2023-11-20 01:00:00 → 2023-11-20 03:00:00
+2023-12-02 08:00:00 → 2023-12-05 03:00:00
+2024-05-20 10:00:00 → 2024-05-21 05:00:00
+Credits
+We appreciate the contributions of the following individuals who helped improve this guide:
+
+Thomas Quilling
+Enrico Spinielli
+Xavier Olive
+Junzi Sun
