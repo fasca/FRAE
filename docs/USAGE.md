@@ -27,7 +27,7 @@ npm start
 | **Aéro** | Afficher / masquer les aéroports majeurs (points cyan) |
 | **Grille** | Afficher / masquer la graticule (15° et 30°) |
 | **Pays** | Afficher / masquer les bordures des pays |
-| **Traînées** | Afficher / masquer les traînées de position derrière chaque avion |
+| **Traînées** | Afficher / masquer les traînées de position derrière chaque avion (~33 min d'historique, 200 points) |
 | **Input texte** | Filtrer les vols par callsign (ex: `AF`, `LH1234`) ou par pays (ex: `France`, `Germany`) |
 | **PNG** | Exporter la vue actuelle en image PNG (téléchargement automatique) |
 

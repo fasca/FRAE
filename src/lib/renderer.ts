@@ -110,7 +110,7 @@ export const AIRPORT_DOT_RADIUS = 3
 export const AIRPORT_LABEL_FONT = '9px monospace'
 export const PLANE_SIZE = 6
 export const PLANE_SELECTED_SIZE = 8
-export const TRAIL_LENGTH = 8
+export const TRAIL_LENGTH = 200
 export const TRAIL_BASE_OPACITY = 0.6
 export const TRAIL_DOT_RADIUS = 2
 export const LABEL_FONT = '11px monospace'
@@ -124,6 +124,10 @@ export const TRAIL_COLOR_RGB = '255, 140, 66'
 
 // ── Layer 6: Flight trails ────────────────────────────────────────────────────
 
+// Subsample long trails to reduce draw calls (1 point per TRAIL_SUBSAMPLE for len > TRAIL_SUBSAMPLE_THRESHOLD)
+const TRAIL_SUBSAMPLE = 5
+const TRAIL_SUBSAMPLE_THRESHOLD = 20
+
 export function drawFlightTrails(
   ctx: CanvasRenderingContext2D,
   projection: GeoProjection,
@@ -131,7 +135,9 @@ export function drawFlightTrails(
 ): void {
   for (const positions of trails.values()) {
     const len = positions.length
+    const subsample = len > TRAIL_SUBSAMPLE_THRESHOLD
     for (let i = 0; i < len; i++) {
+      if (subsample && i % TRAIL_SUBSAMPLE !== 0 && i !== len - 1) continue
       const projected = projection(positions[i])
       if (!projected) continue
       const [x, y] = projected

@@ -162,7 +162,7 @@ describe('renderer constants (new)', () => {
     expect(PLANE_SIZE).toBeGreaterThan(0)
   })
   it('should_define_trail_length_as_positive_number', () => {
-    expect(TRAIL_LENGTH).toBeGreaterThan(0)
+    expect(TRAIL_LENGTH).toBeGreaterThanOrEqual(200)
   })
   it('should_define_trail_base_opacity_between_0_and_1', () => {
     expect(TRAIL_BASE_OPACITY).toBeGreaterThan(0)
