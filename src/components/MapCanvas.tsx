@@ -26,6 +26,8 @@ interface MapCanvasProps {
   flightStatesRef?: MutableRefObject<Map<string, FlightState>>
   dataSource?: DataSource
   exportRef?: MutableRefObject<(() => void) | null>
+  fullTrack?: [number, number][] | null
+  destinationAirport?: Airport | null
 }
 
 export default function MapCanvas({
@@ -42,6 +44,8 @@ export default function MapCanvas({
   flightStatesRef,
   dataSource,
   exportRef,
+  fullTrack,
+  destinationAirport,
 }: MapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -61,6 +65,8 @@ export default function MapCanvas({
   const selectedRef = useRef(selectedIcao24)
   const optionsRef = useRef(options)
   const dataSourceRef = useRef(dataSource)
+  const fullTrackRef = useRef(fullTrack)
+  const destinationAirportRef = useRef(destinationAirport)
 
   // Keep refs in sync with props (without re-rendering)
   useEffect(() => { flightsRef.current = flights }, [flights])
@@ -69,6 +75,8 @@ export default function MapCanvas({
   useEffect(() => { selectedRef.current = selectedIcao24 }, [selectedIcao24])
   useEffect(() => { optionsRef.current = options }, [options])
   useEffect(() => { dataSourceRef.current = dataSource }, [dataSource])
+  useEffect(() => { fullTrackRef.current = fullTrack }, [fullTrack])
+  useEffect(() => { destinationAirportRef.current = destinationAirport }, [destinationAirport])
 
   const drawStaticToOffscreen = useCallback(() => {
     const canvas = canvasRef.current
@@ -80,11 +88,9 @@ export default function MapCanvas({
     const height = rect.height || canvas.offsetHeight
     if (width === 0 || height === 0) return
 
-    // Set main canvas backing-store dimensions (needed for correct sizing before first frame)
     canvas.width = width * dpr
     canvas.height = height * dpr
 
-    // Create or resize offscreen canvas
     if (!offscreenRef.current) {
       offscreenRef.current = document.createElement('canvas')
     }
@@ -101,17 +107,13 @@ export default function MapCanvas({
     drawStaticLayer(offCtx, projection, worldDataRef.current, width, height, options)
   }, [center, scale, options])
 
-  // Ref to call drawStaticToOffscreen from mount-only effect without adding it as a dep
   const drawStaticToOffscreenRef = useRef<() => void>(() => {})
   useEffect(() => {
     drawStaticToOffscreenRef.current = drawStaticToOffscreen
   }, [drawStaticToOffscreen])
 
-  // Animation loop — uses a ref to avoid self-reference-before-declaration lint error
   const animateRef = useRef<() => void>(() => {})
 
-  // Intentionally no dependency array — must run after every render
-  // so animateRef always captures latest refs (flightsRef, offscreenRef, etc.)
   useEffect(() => {
     animateRef.current = () => {
       const canvas = canvasRef.current
@@ -133,7 +135,6 @@ export default function MapCanvas({
       canvas.width = width * dpr
       canvas.height = height * dpr
 
-      // Get or initialize the 2d context (cached in ref to avoid per-frame allocation)
       if (!ctxRef.current) {
         const newCtx = canvas.getContext('2d', { alpha: false })
         if (!newCtx) {
@@ -144,13 +145,9 @@ export default function MapCanvas({
       }
       const ctx = ctxRef.current
 
-      // canvas.width assignment above resets the transform matrix, so re-apply scale each frame
       ctx.scale(dpr, dpr)
-
-      // Copy static layers from offscreen cache
       ctx.drawImage(offscreen, 0, 0, width, height)
 
-      // Draw dynamic layers
       const projection = projectionRef.current
       if (projection) {
         let liveFlights: readonly Flight[] = flightsRef.current
@@ -167,7 +164,9 @@ export default function MapCanvas({
           liveFlights,
           trailsRef.current,
           selectedRef.current,
-          optionsRef.current
+          optionsRef.current,
+          fullTrackRef.current,
+          destinationAirportRef.current
         )
       }
 
@@ -175,20 +174,15 @@ export default function MapCanvas({
     }
   })
 
-  // Start animation loop on mount
   useEffect(() => {
     rafRef.current = requestAnimationFrame(animateRef.current)
-    return () => {
-      cancelAnimationFrame(rafRef.current)
-    }
+    return () => { cancelAnimationFrame(rafRef.current) }
   }, [])
 
-  // Rebuild offscreen cache when projection changes (center, scale, size)
   useEffect(() => {
     drawStaticToOffscreen()
   }, [drawStaticToOffscreen])
 
-  // Load world atlas data on mount with AbortController (mount-only, never re-fetched)
   useEffect(() => {
     const controller = new AbortController()
     fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json', {
@@ -209,7 +203,6 @@ export default function MapCanvas({
     return () => controller.abort()
   }, [])
 
-  // Mouse wheel zoom
   const handleWheel = useCallback(
     (e: WheelEvent) => {
       e.preventDefault()
@@ -232,7 +225,6 @@ export default function MapCanvas({
   const onFlightSelectRef = useRef(onFlightSelect)
   useEffect(() => { onFlightSelectRef.current = onFlightSelect }, [onFlightSelect])
 
-  // Pointer handlers: distinguish click (flight select) from drag (recenter)
   const handlePointerDown = useCallback((e: PointerEvent) => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -290,7 +282,7 @@ export default function MapCanvas({
     }
   }, [handlePointerDown, handlePointerMove, handlePointerUp])
 
-  // Export to PNG: composite static + dynamic layers into a temp canvas
+  // Export to PNG
   useEffect(() => {
     if (!exportRef) return
     exportRef.current = () => {
@@ -309,7 +301,13 @@ export default function MapCanvas({
       if (!tmpCtx) return
       tmpCtx.scale(dpr, dpr)
       tmpCtx.drawImage(offscreen, 0, 0, width, height)
-      drawDynamicLayers(tmpCtx, projection, airportsRef.current, flightsRef.current, trailsRef.current, selectedRef.current, optionsRef.current)
+      drawDynamicLayers(
+        tmpCtx, projection,
+        airportsRef.current, flightsRef.current,
+        trailsRef.current, selectedRef.current,
+        optionsRef.current,
+        fullTrackRef.current, destinationAirportRef.current
+      )
       const url = tmp.toDataURL('image/png')
       const a = document.createElement('a')
       a.href = url
@@ -323,9 +321,7 @@ export default function MapCanvas({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const observer = new ResizeObserver(() => {
-      drawStaticToOffscreen()
-    })
+    const observer = new ResizeObserver(() => { drawStaticToOffscreen() })
     observer.observe(canvas)
     return () => observer.disconnect()
   }, [drawStaticToOffscreen])

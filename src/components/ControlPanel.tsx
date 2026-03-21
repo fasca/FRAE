@@ -10,11 +10,13 @@ interface ControlPanelProps {
   scale: number
   options: MapOptions
   filterQuery: string
+  replayMode?: boolean
   onCenterChange: (center: ProjectionCenter) => void
   onScaleChange: (scale: number) => void
   onOptionsChange: (options: MapOptions) => void
   onFilterChange: (query: string) => void
   onExport?: () => void
+  onReplayToggle?: () => void
 }
 
 interface ToggleButtonProps {
@@ -45,11 +47,13 @@ export default function ControlPanel({
   scale,
   options,
   filterQuery,
+  replayMode = false,
   onCenterChange,
   onScaleChange,
   onOptionsChange,
   onFilterChange,
   onExport,
+  onReplayToggle,
 }: ControlPanelProps) {
   return (
     <div className="flex items-center gap-2 px-4 py-2 bg-[#0a1628] border-b border-[#1a3a5c] shrink-0 flex-wrap">
@@ -126,6 +130,19 @@ export default function ControlPanel({
           onChange={(e) => onFilterChange(e.target.value)}
           className="px-2 py-1 text-xs bg-[#0a1628] border border-[#1a3a5c] rounded text-[#c0d8f0] placeholder-[#4a7a9f] focus:outline-none focus:border-[#00e5ff] w-40"
         />
+        {onReplayToggle && (
+          <button
+            aria-label="Toggle replay mode"
+            onClick={onReplayToggle}
+            className={`px-2 py-1 text-xs rounded border transition-colors ${
+              replayMode
+                ? 'bg-[#0d2a40] text-[#ffcc00] border-[#ffcc00]'
+                : 'text-[#4a7a9f] border-transparent hover:text-[#c0d8f0] hover:border-[#1a3a5c]'
+            }`}
+          >
+            ⏪ Replay
+          </button>
+        )}
         {onExport && (
           <button
             aria-label="Export PNG"

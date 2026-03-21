@@ -256,9 +256,10 @@ describe('drawSelectedLabel', () => {
 })
 
 describe('drawDynamicLayers', () => {
-  it('should_be_a_function_with_seven_parameters', () => {
+  it('should_be_a_function_with_nine_parameters', () => {
     expect(drawDynamicLayers).toBeInstanceOf(Function)
-    expect(drawDynamicLayers.length).toBe(7)
+    // 7 original params + 2 optional: fullTrack, destinationAirport
+    expect(drawDynamicLayers.length).toBe(9)
   })
   it('should_call_drawing_functions_when_options_enabled', () => {
     const ctx = makeMockCtx()

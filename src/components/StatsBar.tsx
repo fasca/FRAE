@@ -6,14 +6,42 @@ interface StatsBarProps {
   flightCount: number
   lastUpdate: number | null
   dataSource: DataSource
+  replayMode?: boolean
+  replayTime?: number | null
 }
 
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString()
 }
 
-export default function StatsBar({ center, scale, flightCount, lastUpdate, dataSource }: StatsBarProps) {
-  const isLive = dataSource === 'live'
+function formatReplayTime(unixSec: number): string {
+  if (unixSec === 0) return '--:--:--'
+  return new Date(unixSec * 1000).toUTCString().slice(17, 25) + ' UTC'
+}
+
+export default function StatsBar({
+  center,
+  scale,
+  flightCount,
+  lastUpdate,
+  dataSource,
+  replayMode = false,
+  replayTime = null,
+}: StatsBarProps) {
+  const isLive   = dataSource === 'live'
+  const isReplay = replayMode || dataSource === 'replay'
+
+  const sourceLabel = isReplay ? 'REPLAY' : isLive ? 'LIVE' : 'SIM'
+  const sourceColor = isReplay
+    ? 'text-[#ffcc00]'
+    : isLive
+      ? 'text-green-400'
+      : 'text-orange-400'
+  const dotColor = isReplay
+    ? 'bg-[#ffcc00]'
+    : isLive
+      ? 'bg-green-400'
+      : 'bg-orange-400'
 
   return (
     <div className="flex items-center gap-6 px-4 py-1 bg-[#0a1628] border-t border-[#1a3a5c] shrink-0 text-xs text-[#4a7a9f]">
@@ -28,18 +56,20 @@ export default function StatsBar({ center, scale, flightCount, lastUpdate, dataS
         Vols: <span className="text-[#c0d8f0]">{flightCount}</span>
       </span>
       <span className="flex items-center gap-1">
-        <span
-          className={`inline-block w-1.5 h-1.5 rounded-full ${isLive ? 'bg-green-400' : 'bg-orange-400'}`}
-        />
-        <span className={isLive ? 'text-green-400' : 'text-orange-400'}>
-          {isLive ? 'LIVE' : 'SIM'}
+        <span className={`inline-block w-1.5 h-1.5 rounded-full ${dotColor}`} />
+        <span className={sourceColor}>{sourceLabel}</span>
+      </span>
+      {isReplay && replayTime ? (
+        <span>
+          ⏱ <span className="text-[#ffcc00]">{formatReplayTime(replayTime)}</span>
         </span>
-      </span>
-      <span>
-        MAJ: <span className="text-[#c0d8f0]">{lastUpdate !== null ? formatTime(lastUpdate) : '---'}</span>
-      </span>
+      ) : (
+        <span>
+          MAJ: <span className="text-[#c0d8f0]">{lastUpdate !== null ? formatTime(lastUpdate) : '---'}</span>
+        </span>
+      )}
       <span className="ml-auto text-[#1a3a5c]">
-        AE FLIGHT RADAR — Phase 4
+        AE FLIGHT RADAR — Phase 5
       </span>
     </div>
   )

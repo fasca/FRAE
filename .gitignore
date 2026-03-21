@@ -42,3 +42,6 @@ next-env.d.ts
 
 # git worktrees
 .worktrees/
+
+# SQLite database (flight history)
+/data/

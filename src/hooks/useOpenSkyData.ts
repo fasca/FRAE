@@ -9,10 +9,12 @@
  * - Fallback to simulation after 3 consecutive errors (no auto-recovery)
  * - flightStatesRef exposed for MapCanvas RAF interpolation
  * - trailsRef accumulates position history per icao24
+ * - After each successful fetch, logs positions to SQLite via /api/opensky/log-positions
+ *   (fire-and-forget — does not block the fetch cycle)
  */
 import { useState, useEffect, useRef } from 'react'
 import type { MutableRefObject } from 'react'
-import type { Flight, FlightState, DataSource } from '@/types/index'
+import type { Flight, FlightState, DataSource, Position } from '@/types/index'
 import { fetchOpenSkyFlights } from '@/lib/opensky'
 import { generateSimulatedFlights, updateSimulatedFlights, simulatedFlightToFlight, interpolatePosition } from '@/lib/flights'
 import { TRAIL_LENGTH } from '@/lib/renderer'
@@ -30,6 +32,32 @@ interface UseOpenSkyDataReturn {
   dataSource: DataSource
   lastUpdate: number | null
   flightCount: number
+}
+
+/** Fire-and-forget: log positions to SQLite without blocking the fetch cycle */
+function logPositions(flights: readonly Flight[]): void {
+  const now = Math.floor(Date.now() / 1000)
+  const positions: Position[] = flights.map(f => ({
+    icao24:        f.icao24,
+    callsign:      f.callsign || null,
+    time:          now,
+    lat:           f.latitude,
+    lon:           f.longitude,
+    altitude:      f.altitude,
+    heading:       f.heading,
+    velocity:      f.velocity,
+    vertical_rate: f.verticalRate,
+    on_ground:     f.onGround,
+  }))
+
+  // Intentionally not awaited — position logging must not block the animation loop
+  void fetch('/api/opensky/log-positions', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(positions),
+  }).catch(() => {
+    // Silently ignore failures — logging is best-effort
+  })
 }
 
 export function useOpenSkyData(): UseOpenSkyDataReturn {
@@ -100,7 +128,7 @@ export function useOpenSkyData(): UseOpenSkyDataReturn {
               previous: existing?.current ?? null,
               lastFetchTime: now,
             })
-            // Accumulate trails
+            // Accumulate trails (unbounded by icao24 for selected flight track support)
             const trail = trailsRef.current.get(icao24) ?? []
             trail.push([newFlight.longitude, newFlight.latitude])
             if (trail.length > TRAIL_LENGTH) trail.shift()
@@ -114,6 +142,9 @@ export function useOpenSkyData(): UseOpenSkyDataReturn {
               trailsRef.current.delete(icao24)
             }
           }
+
+          // Log positions to SQLite (fire-and-forget, best-effort)
+          logPositions(result.flights)
 
           setLastUpdate(result.timestamp)
           setFlights(result.flights)
