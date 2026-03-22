@@ -55,8 +55,9 @@ db.exec(`
     arrival_icao   TEXT,
     fetched_at     INTEGER DEFAULT (unixepoch())
   );
-  CREATE INDEX IF NOT EXISTS idx_flights_callsign ON flights(callsign);
-  CREATE INDEX IF NOT EXISTS idx_flights_icao24   ON flights(icao24);
+  CREATE INDEX IF NOT EXISTS idx_flights_callsign   ON flights(callsign);
+  CREATE INDEX IF NOT EXISTS idx_flights_icao24     ON flights(icao24);
+  CREATE INDEX IF NOT EXISTS idx_flights_time_range ON flights(last_seen, first_seen);
 
   CREATE TABLE IF NOT EXISTS tracks (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -204,9 +205,119 @@ export function getTrackByIcao24(icao24: string): TrackRecord | null {
   return row ?? null
 }
 
+/**
+ * Returns all flight records that overlap with the given day.
+ * A flight overlaps if it started before dayEnd and ended after dayStart.
+ */
+export function getFlightsByDay(dayStart: number, dayEnd: number): FlightRecord[] {
+  return db.prepare(
+    `SELECT * FROM flights
+     WHERE last_seen >= ? AND first_seen <= ?
+     ORDER BY first_seen ASC`
+  ).all(dayStart, dayEnd) as FlightRecord[]
+}
+
 export function getActiveIcao24s(begin: number, end: number): string[] {
   const rows = db.prepare(
     'SELECT DISTINCT icao24 FROM positions WHERE time >= ? AND time <= ?'
   ).all(begin, end) as { icao24: string }[]
   return rows.map(r => r.icao24)
+}
+
+// ── Routes corridor aggregation ───────────────────────────────────────────
+
+interface CorridorRow {
+  departure_icao: string
+  arrival_icao: string
+  total_flights: number
+  callsigns: string | null
+}
+
+/**
+ * Aggregate the routes table by (departure_icao, arrival_icao) pair.
+ * Returns corridors ordered by total flight count descending.
+ */
+export function getAggregatedCorridors(
+  minFlightCount: number,
+  limit: number
+): CorridorRow[] {
+  return db.prepare(`
+    SELECT
+      departure_icao,
+      arrival_icao,
+      SUM(flight_count) AS total_flights,
+      GROUP_CONCAT(callsign, ',') AS callsigns
+    FROM routes
+    WHERE departure_icao IS NOT NULL
+      AND arrival_icao IS NOT NULL
+      AND departure_icao != arrival_icao
+    GROUP BY departure_icao, arrival_icao
+    HAVING total_flights >= ?
+    ORDER BY total_flights DESC
+    LIMIT ?
+  `).all(minFlightCount, limit) as CorridorRow[]
+}
+
+/**
+ * Fetch up to `limit` [lon, lat] pairs for a given callsign from the positions table.
+ * Used to attach sample trajectories to corridors.
+ */
+export function getSamplePositionsForCallsign(
+  callsign: string,
+  limit: number
+): [number, number][] {
+  const rows = db.prepare(
+    'SELECT lon, lat FROM positions WHERE callsign = ? ORDER BY time ASC LIMIT ?'
+  ).all(callsign.trim().toUpperCase(), limit) as { lon: number; lat: number }[]
+  return rows.map(r => [r.lon, r.lat])
+}
+
+// ── Maintenance / retention ────────────────────────────────────────────────
+
+export const POSITIONS_RETENTION_DAYS = 7
+export const FLIGHTS_RETENTION_DAYS   = 30
+export const ROUTES_RETENTION_DAYS    = 30
+export const TRACKS_RETENTION_DAYS    = 7
+
+/** Purge positions older than maxAgeSec (default: 7 days). Returns deleted count. */
+export function purgeOldPositions(maxAgeSec = POSITIONS_RETENTION_DAYS * 86400): number {
+  const cutoff = Math.floor(Date.now() / 1000) - maxAgeSec
+  const result = db.prepare('DELETE FROM positions WHERE time < ?').run(cutoff)
+  return result.changes
+}
+
+/** Purge flights older than maxAgeSec (default: 30 days). Returns deleted count. */
+export function purgeOldFlights(maxAgeSec = FLIGHTS_RETENTION_DAYS * 86400): number {
+  const cutoff = Math.floor(Date.now() / 1000) - maxAgeSec
+  const result = db.prepare('DELETE FROM flights WHERE fetched_at < ?').run(cutoff)
+  return result.changes
+}
+
+/** Purge tracks fetched before maxAgeSec ago (default: 7 days). Returns deleted count. */
+export function purgeOldTracks(maxAgeSec = TRACKS_RETENTION_DAYS * 86400): number {
+  const cutoff = Math.floor(Date.now() / 1000) - maxAgeSec
+  const result = db.prepare('DELETE FROM tracks WHERE fetched_at < ?').run(cutoff)
+  return result.changes
+}
+
+/** Purge routes not seen in maxAgeSec (default: 30 days). Returns deleted count. */
+export function purgeStaleRoutes(maxAgeSec = ROUTES_RETENTION_DAYS * 86400): number {
+  const cutoff = Math.floor(Date.now() / 1000) - maxAgeSec
+  const result = db.prepare('DELETE FROM routes WHERE last_seen < ?').run(cutoff)
+  return result.changes
+}
+
+/** Run all purges then VACUUM. Returns per-table deleted counts. */
+export function runMaintenance(): {
+  positions: number
+  flights: number
+  tracks: number
+  routes: number
+} {
+  const positions = purgeOldPositions()
+  const flights   = purgeOldFlights()
+  const tracks    = purgeOldTracks()
+  const routes    = purgeStaleRoutes()
+  db.exec('VACUUM')
+  return { positions, flights, tracks, routes }
 }

@@ -8,6 +8,7 @@ interface StatsBarProps {
   dataSource: DataSource
   replayMode?: boolean
   replayTime?: number | null
+  openSkyError?: string | null
 }
 
 function formatTime(ts: number): string {
@@ -27,21 +28,15 @@ export default function StatsBar({
   dataSource,
   replayMode = false,
   replayTime = null,
+  openSkyError = null,
 }: StatsBarProps) {
-  const isLive   = dataSource === 'live'
-  const isReplay = replayMode || dataSource === 'replay'
+  const isRoutes  = dataSource === 'routes'
+  const isReplay  = !isRoutes && (replayMode || dataSource === 'replay')
+  const isOffline = !isReplay && !isRoutes && openSkyError !== null && flightCount === 0
 
-  const sourceLabel = isReplay ? 'REPLAY' : isLive ? 'LIVE' : 'SIM'
-  const sourceColor = isReplay
-    ? 'text-[#ffcc00]'
-    : isLive
-      ? 'text-green-400'
-      : 'text-orange-400'
-  const dotColor = isReplay
-    ? 'bg-[#ffcc00]'
-    : isLive
-      ? 'bg-green-400'
-      : 'bg-orange-400'
+  const sourceLabel = isRoutes ? 'ROUTES' : isReplay ? 'REPLAY' : (isOffline ? 'OFFLINE' : 'LIVE')
+  const sourceColor = isRoutes ? 'text-[#c8dcff]' : isReplay ? 'text-[#ffcc00]' : (isOffline ? 'text-red-400' : 'text-green-400')
+  const dotColor    = isRoutes ? 'bg-[#c8dcff]'   : isReplay ? 'bg-[#ffcc00]'   : (isOffline ? 'bg-red-400'   : 'bg-green-400')
 
   return (
     <div className="flex items-center gap-6 px-4 py-1 bg-[#0a1628] border-t border-[#1a3a5c] shrink-0 text-xs text-[#4a7a9f]">
@@ -53,7 +48,7 @@ export default function StatsBar({
         Zoom: <span className="text-[#c0d8f0]">{scale}</span>
       </span>
       <span>
-        Vols: <span className="text-[#c0d8f0]">{flightCount}</span>
+        {isRoutes ? 'Corridors' : 'Vols'}: <span className="text-[#c0d8f0]">{flightCount}</span>
       </span>
       <span className="flex items-center gap-1">
         <span className={`inline-block w-1.5 h-1.5 rounded-full ${dotColor}`} />

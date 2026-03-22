@@ -11,12 +11,14 @@ interface ControlPanelProps {
   options: MapOptions
   filterQuery: string
   replayMode?: boolean
+  routesMode?: boolean
   onCenterChange: (center: ProjectionCenter) => void
   onScaleChange: (scale: number) => void
   onOptionsChange: (options: MapOptions) => void
   onFilterChange: (query: string) => void
   onExport?: () => void
   onReplayToggle?: () => void
+  onRoutesToggle?: () => void
 }
 
 interface ToggleButtonProps {
@@ -48,12 +50,14 @@ export default function ControlPanel({
   options,
   filterQuery,
   replayMode = false,
+  routesMode = false,
   onCenterChange,
   onScaleChange,
   onOptionsChange,
   onFilterChange,
   onExport,
   onReplayToggle,
+  onRoutesToggle,
 }: ControlPanelProps) {
   return (
     <div className="flex items-center gap-2 px-4 py-2 bg-[#0a1628] border-b border-[#1a3a5c] shrink-0 flex-wrap">
@@ -113,12 +117,6 @@ export default function ControlPanel({
           ariaLabel="Toggle country borders"
           onClick={() => onOptionsChange({ ...options, showCountryBorders: !options.showCountryBorders })}
         />
-        <ToggleButton
-          active={options.showFlightPaths}
-          label="Traînées"
-          ariaLabel="Toggle flight trails"
-          onClick={() => onOptionsChange({ ...options, showFlightPaths: !options.showFlightPaths })}
-        />
       </div>
 
       <div className="flex items-center gap-2 ml-2 border-l border-[#1a3a5c] pl-2">
@@ -141,6 +139,19 @@ export default function ControlPanel({
             }`}
           >
             ⏪ Replay
+          </button>
+        )}
+        {onRoutesToggle && (
+          <button
+            aria-label="Toggle routes mode"
+            onClick={onRoutesToggle}
+            className={`px-2 py-1 text-xs rounded border transition-colors ${
+              routesMode
+                ? 'bg-[#0d2a40] text-[#c8dcff] border-[#c8dcff]'
+                : 'text-[#4a7a9f] border-transparent hover:text-[#c0d8f0] hover:border-[#1a3a5c]'
+            }`}
+          >
+            ✦ Routes
           </button>
         )}
         {onExport && (

@@ -6,11 +6,11 @@ import type { Topology, GeometryCollection } from 'topojson-specification'
 import type { FeatureCollection } from 'geojson'
 import type { GeoProjection } from 'd3-geo'
 import { createProjection, calculateZoomScale } from '@/lib/projection'
-import { drawStaticLayer, drawDynamicLayers } from '@/lib/renderer'
-import { findClosestFlight, interpolateFlight } from '@/lib/flights'
+import { drawStaticLayer, drawDynamicLayers, drawReplayLayer, drawRoutesLayer } from '@/lib/renderer'
+import { findClosestFlight, findClosestCompletedFlight, interpolateFlight, findClosestCorridor } from '@/lib/flights'
 import { FETCH_INTERVAL_MS } from '@/lib/opensky'
 import type { MutableRefObject } from 'react'
-import type { ProjectionCenter, MapOptions, Flight, Airport, FlightState, DataSource } from '@/types/index'
+import type { ProjectionCenter, MapOptions, Flight, Airport, FlightState, DataSource, CompletedFlight, RouteCorridor } from '@/types/index'
 
 interface MapCanvasProps {
   center: ProjectionCenter
@@ -28,6 +28,12 @@ interface MapCanvasProps {
   exportRef?: MutableRefObject<(() => void) | null>
   fullTrack?: [number, number][] | null
   destinationAirport?: Airport | null
+  completedFlights?: readonly CompletedFlight[]
+  replaySelectedIndex?: number | null
+  onReplayFlightSelect?: (index: number | null) => void
+  corridors?: readonly RouteCorridor[]
+  routesSelectedIndex?: number | null
+  onRoutesCorridorSelect?: (index: number | null) => void
 }
 
 export default function MapCanvas({
@@ -46,6 +52,12 @@ export default function MapCanvas({
   exportRef,
   fullTrack,
   destinationAirport,
+  completedFlights,
+  replaySelectedIndex,
+  onReplayFlightSelect,
+  corridors,
+  routesSelectedIndex,
+  onRoutesCorridorSelect,
 }: MapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -67,6 +79,10 @@ export default function MapCanvas({
   const dataSourceRef = useRef(dataSource)
   const fullTrackRef = useRef(fullTrack)
   const destinationAirportRef = useRef(destinationAirport)
+  const completedFlightsRef = useRef(completedFlights)
+  const replaySelectedIndexRef = useRef(replaySelectedIndex)
+  const corridorsRef = useRef(corridors)
+  const routesSelectedIndexRef = useRef(routesSelectedIndex)
 
   // Keep refs in sync with props (without re-rendering)
   useEffect(() => { flightsRef.current = flights }, [flights])
@@ -77,6 +93,10 @@ export default function MapCanvas({
   useEffect(() => { dataSourceRef.current = dataSource }, [dataSource])
   useEffect(() => { fullTrackRef.current = fullTrack }, [fullTrack])
   useEffect(() => { destinationAirportRef.current = destinationAirport }, [destinationAirport])
+  useEffect(() => { completedFlightsRef.current = completedFlights }, [completedFlights])
+  useEffect(() => { replaySelectedIndexRef.current = replaySelectedIndex }, [replaySelectedIndex])
+  useEffect(() => { corridorsRef.current = corridors }, [corridors])
+  useEffect(() => { routesSelectedIndexRef.current = routesSelectedIndex }, [routesSelectedIndex])
 
   const drawStaticToOffscreen = useCallback(() => {
     const canvas = canvasRef.current
@@ -150,24 +170,41 @@ export default function MapCanvas({
 
       const projection = projectionRef.current
       if (projection) {
-        let liveFlights: readonly Flight[] = flightsRef.current
-        if (dataSourceRef.current === 'live' && flightStatesRef) {
-          const now = Date.now()
-          liveFlights = Array.from(flightStatesRef.current.values()).map(
-            state => interpolateFlight(state, now, FETCH_INTERVAL_MS)
+        if (dataSourceRef.current === 'routes' && corridorsRef.current) {
+          drawRoutesLayer(
+            ctx, projection,
+            corridorsRef.current,
+            airportsRef.current,
+            routesSelectedIndexRef.current ?? null,
+            optionsRef.current
+          )
+        } else if (dataSourceRef.current === 'replay' && completedFlightsRef.current) {
+          drawReplayLayer(
+            ctx, projection,
+            airportsRef.current,
+            completedFlightsRef.current,
+            replaySelectedIndexRef.current ?? null,
+            optionsRef.current
+          )
+        } else {
+          let liveFlights: readonly Flight[] = flightsRef.current
+          if (dataSourceRef.current === 'live' && flightStatesRef) {
+            const now = Date.now()
+            liveFlights = Array.from(flightStatesRef.current.values()).map(
+              state => interpolateFlight(state, now, FETCH_INTERVAL_MS)
+            )
+          }
+          drawDynamicLayers(
+            ctx, projection,
+            airportsRef.current,
+            liveFlights,
+            trailsRef.current,
+            selectedRef.current,
+            optionsRef.current,
+            fullTrackRef.current,
+            destinationAirportRef.current
           )
         }
-        drawDynamicLayers(
-          ctx,
-          projection,
-          airportsRef.current,
-          liveFlights,
-          trailsRef.current,
-          selectedRef.current,
-          optionsRef.current,
-          fullTrackRef.current,
-          destinationAirportRef.current
-        )
       }
 
       rafRef.current = requestAnimationFrame(animateRef.current)
@@ -225,6 +262,12 @@ export default function MapCanvas({
   const onFlightSelectRef = useRef(onFlightSelect)
   useEffect(() => { onFlightSelectRef.current = onFlightSelect }, [onFlightSelect])
 
+  const onReplayFlightSelectRef = useRef(onReplayFlightSelect)
+  useEffect(() => { onReplayFlightSelectRef.current = onReplayFlightSelect }, [onReplayFlightSelect])
+
+  const onRoutesCorridorSelectRef = useRef(onRoutesCorridorSelect)
+  useEffect(() => { onRoutesCorridorSelectRef.current = onRoutesCorridorSelect }, [onRoutesCorridorSelect])
+
   const handlePointerDown = useCallback((e: PointerEvent) => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -262,6 +305,12 @@ export default function MapCanvas({
         const [lon, lat] = coords
         onCenterChangeRef.current({ lat, lon, label: 'Custom' })
       }
+    } else if (dataSourceRef.current === 'routes' && corridorsRef.current && onRoutesCorridorSelectRef.current) {
+      const idx = findClosestCorridor(corridorsRef.current, projection!, x, y, 20)
+      onRoutesCorridorSelectRef.current(idx)
+    } else if (dataSourceRef.current === 'replay' && completedFlightsRef.current && onReplayFlightSelectRef.current) {
+      const idx = findClosestCompletedFlight(completedFlightsRef.current, projection!, x, y, 15)
+      onReplayFlightSelectRef.current(idx)
     } else {
       const found = findClosestFlight(flightsRef.current, projection!, x, y, 15)
       onFlightSelectRef.current(found?.icao24 ?? null)
@@ -301,13 +350,21 @@ export default function MapCanvas({
       if (!tmpCtx) return
       tmpCtx.scale(dpr, dpr)
       tmpCtx.drawImage(offscreen, 0, 0, width, height)
-      drawDynamicLayers(
-        tmpCtx, projection,
-        airportsRef.current, flightsRef.current,
-        trailsRef.current, selectedRef.current,
-        optionsRef.current,
-        fullTrackRef.current, destinationAirportRef.current
-      )
+      if (dataSourceRef.current === 'routes' && corridorsRef.current) {
+        drawRoutesLayer(tmpCtx, projection, corridorsRef.current,
+          airportsRef.current, routesSelectedIndexRef.current ?? null, optionsRef.current)
+      } else if (dataSourceRef.current === 'replay' && completedFlightsRef.current) {
+        drawReplayLayer(tmpCtx, projection, airportsRef.current,
+          completedFlightsRef.current, replaySelectedIndexRef.current ?? null, optionsRef.current)
+      } else {
+        drawDynamicLayers(
+          tmpCtx, projection,
+          airportsRef.current, flightsRef.current,
+          trailsRef.current, selectedRef.current,
+          optionsRef.current,
+          fullTrackRef.current, destinationAirportRef.current
+        )
+      }
       const url = tmp.toDataURL('image/png')
       const a = document.createElement('a')
       a.href = url

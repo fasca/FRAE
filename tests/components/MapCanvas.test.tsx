@@ -47,7 +47,6 @@ const mockOptions: MapOptions = {
   showAirports: true,
   showGraticule: true,
   showCountryBorders: true,
-  showFlightPaths: false,
 }
 const mockFlights: readonly Flight[] = []
 const mockAirports: readonly Airport[] = []
@@ -146,38 +145,6 @@ describe('MapCanvas', () => {
     }).not.toThrow()
   })
 
-  it('should_accept_dataSource_simulated_without_error', () => {
-    const mockFlight: Flight = {
-      icao24: 'abc123',
-      callsign: 'AF1234',
-      originCountry: 'France',
-      longitude: 2.55,
-      latitude: 49.01,
-      altitude: 10000,
-      velocity: 250,
-      heading: 90,
-      verticalRate: 0,
-      onGround: false,
-      lastUpdate: Date.now(),
-    }
-    expect(() => {
-      render(
-        <MapCanvas
-          center={mockCenter}
-          scale={250}
-          options={mockOptions}
-          flights={[mockFlight]}
-          airports={mockAirports}
-          trails={mockTrails}
-          selectedIcao24={null}
-          onScaleChange={vi.fn()}
-          onFlightSelect={vi.fn()}
-          dataSource="simulated"
-        />
-      )
-    }).not.toThrow()
-  })
-
   it('should_accept_all_new_props_without_error', () => {
     const mockFlight: Flight = {
       icao24: 'abc123',
@@ -192,7 +159,7 @@ describe('MapCanvas', () => {
       onGround: false,
       lastUpdate: Date.now(),
     }
-    const mockAirport: Airport = { code: 'CDG', name: 'Paris Charles de Gaulle', lat: 49.01, lon: 2.55 }
+    const mockAirport: Airport = { code: 'CDG', icao: 'LFPG', name: 'Paris Charles de Gaulle', lat: 49.01, lon: 2.55 }
     const trails = new Map<string, [number, number][]>([['abc123', [[2.55, 49.01]]]])
 
     expect(() => {
@@ -200,7 +167,7 @@ describe('MapCanvas', () => {
         <MapCanvas
           center={{ lat: 90, lon: 0, label: 'Pôle Nord' }}
           scale={250}
-          options={{ showAirports: true, showGraticule: true, showCountryBorders: true, showFlightPaths: false }}
+          options={{ showAirports: true, showGraticule: true, showCountryBorders: true }}
           flights={[mockFlight]}
           airports={[mockAirport]}
           trails={trails}

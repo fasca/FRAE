@@ -32,11 +32,6 @@ describe('StatsBar', () => {
     expect(screen.getByText(/LIVE/i)).toBeDefined()
   })
 
-  it('should_render_sim_indicator_when_data_source_is_simulated', () => {
-    render(<StatsBar {...defaultProps} dataSource="simulated" />)
-    expect(screen.getByText(/SIM/i)).toBeDefined()
-  })
-
   it('should_render_last_update_time_when_provided', () => {
     // Use a fixed timestamp and check that a time string appears
     const ts = new Date('2024-01-01T12:34:56Z').getTime()

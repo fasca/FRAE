@@ -5,24 +5,12 @@
  */
 import { geoInterpolate } from 'd3-geo'
 import type { GeoProjection } from 'd3-geo'
-import { getRandomAirportPair } from '@/lib/airports'
-import type { Airport, Flight, FlightState, SimulatedFlight } from '@/types/index'
+import type { Airport, Flight, FlightState, CompletedFlight, RouteCorridor } from '@/types/index'
 
 const AIRLINE_CODES = [
   'AF', 'BA', 'LH', 'AA', 'UA', 'DL', 'EK', 'QR', 'SQ', 'NH',
   'KL', 'IB', 'AZ', 'TK', 'CX', 'JL', 'KE', 'QF', 'AC', 'LA',
 ]
-
-const MIN_DURATION_MS = 30_000   // 30 seconds (accelerated simulation)
-const MAX_DURATION_MS = 120_000  // 2 minutes (accelerated simulation)
-const MIN_ALTITUDE = 10_000      // metres (cruising)
-const MAX_ALTITUDE = 12_000
-const MIN_VELOCITY = 220         // m/s
-const MAX_VELOCITY = 280
-
-function randomBetween(min: number, max: number): number {
-  return min + Math.random() * (max - min)
-}
 
 export function generateCallsign(): string {
   const airline = AIRLINE_CODES[Math.floor(Math.random() * AIRLINE_CODES.length)]
@@ -58,71 +46,6 @@ export function interpolatePosition(
   )
   const [lon, lat] = interp(t)
   return [lon, lat]
-}
-
-export function generateSimulatedFlights(count: number): SimulatedFlight[] {
-  return Array.from({ length: count }, () => {
-    const [origin, destination] = getRandomAirportPair()
-    const initialProgress = Math.random() * 0.8 // start mid-flight (0–80%)
-    const duration = randomBetween(MIN_DURATION_MS, MAX_DURATION_MS)
-    return {
-      icao24: generateIcao24(),
-      callsign: generateCallsign(),
-      originCountry: origin.name.split(' ')[0], // simplified
-      origin,
-      destination,
-      progress: initialProgress,
-      departureTime: Date.now() - initialProgress * duration,
-      duration,
-    }
-  })
-}
-
-export function updateSimulatedFlights(
-  flights: SimulatedFlight[],
-  now: number
-): SimulatedFlight[] {
-  return flights.map(f => {
-    const progress = Math.min(1, (now - f.departureTime) / f.duration)
-    if (progress >= 1) {
-      // Recycle: assign a new route while keeping the same icao24
-      const [origin, destination] = getRandomAirportPair()
-      return {
-        icao24: f.icao24,
-        callsign: generateCallsign(),
-        originCountry: origin.name.split(' ')[0],
-        origin,
-        destination,
-        progress: 0,
-        departureTime: now,
-        duration: randomBetween(MIN_DURATION_MS, MAX_DURATION_MS),
-      }
-    }
-    return { ...f, progress }
-  })
-}
-
-export function simulatedFlightToFlight(sim: SimulatedFlight): Flight {
-  const [lon, lat] = interpolatePosition(sim.origin, sim.destination, sim.progress)
-
-  // Compute heading from current position to a slightly ahead position
-  const tAhead = Math.min(1, sim.progress + 0.01)
-  const [lonAhead, latAhead] = interpolatePosition(sim.origin, sim.destination, tAhead)
-  const heading = calculateHeading([lon, lat], [lonAhead, latAhead])
-
-  return {
-    icao24: sim.icao24,
-    callsign: sim.callsign,
-    originCountry: sim.originCountry,
-    longitude: lon,
-    latitude: lat,
-    altitude: randomBetween(MIN_ALTITUDE, MAX_ALTITUDE),
-    velocity: randomBetween(MIN_VELOCITY, MAX_VELOCITY),
-    heading,
-    verticalRate: 0,
-    onGround: false,
-    lastUpdate: Date.now(),
-  }
 }
 
 /**
@@ -190,4 +113,81 @@ export function findClosestFlight(
   }
 
   return closest
+}
+
+/** Find the index of the closest CompletedFlight by its last recorded position. */
+export function findClosestCompletedFlight(
+  flights: readonly CompletedFlight[],
+  projection: GeoProjection,
+  canvasX: number,
+  canvasY: number,
+  maxDistancePx: number
+): number | null {
+  let closestIdx: number | null = null
+  let minDist = maxDistancePx
+
+  for (let i = 0; i < flights.length; i++) {
+    const { positions } = flights[i]
+    if (positions.length === 0) continue
+    const lastPos = positions[positions.length - 1]
+    const projected = projection(lastPos)
+    if (!projected) continue
+    const [px, py] = projected
+    const dist = Math.sqrt((px - canvasX) ** 2 + (py - canvasY) ** 2)
+    if (dist < minDist) {
+      minDist = dist
+      closestIdx = i
+    }
+  }
+
+  return closestIdx
+}
+
+
+/**
+ * Find the index of the corridor whose airport-to-airport straight line
+ * is closest to (canvasX, canvasY) in pixel space.
+ * Returns null if no corridor is within maxDistancePx.
+ */
+export function findClosestCorridor(
+  corridors: readonly RouteCorridor[],
+  projection: GeoProjection,
+  canvasX: number,
+  canvasY: number,
+  maxDistancePx: number
+): number | null {
+  let closestIdx: number | null = null
+  let minDist = maxDistancePx
+
+  for (let i = 0; i < corridors.length; i++) {
+    const { departureAirport, arrivalAirport } = corridors[i]
+    if (!departureAirport || !arrivalAirport) continue
+
+    const a = projection([departureAirport.lon, departureAirport.lat])
+    const b = projection([arrivalAirport.lon,   arrivalAirport.lat])
+    if (!a || !b) continue
+
+    // Point-to-segment distance in pixel space
+    const dx = b[0] - a[0]
+    const dy = b[1] - a[1]
+    const lenSq = dx * dx + dy * dy
+    let dist: number
+
+    if (lenSq === 0) {
+      // Degenerate segment — just distance to point a
+      dist = Math.sqrt((canvasX - a[0]) ** 2 + (canvasY - a[1]) ** 2)
+    } else {
+      const t = Math.max(0, Math.min(1, ((canvasX - a[0]) * dx + (canvasY - a[1]) * dy) / lenSq))
+      const closestX = a[0] + t * dx
+      const closestY = a[1] + t * dy
+      dist = Math.sqrt((canvasX - closestX) ** 2 + (canvasY - closestY) ** 2)
+    }
+
+    if (dist < minDist) {
+      minDist = dist
+      closestIdx = i
+    }
+  }
+
+  return closestIdx
 }

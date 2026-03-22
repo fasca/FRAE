@@ -37,25 +37,10 @@ export interface ProjectionCenter {
  */
 export interface Airport {
   code: string   // IATA code (3 letters, e.g. CDG)
-  icao?: string  // ICAO code (4 letters, e.g. LFPG) — used for route lookup
+  icao: string   // ICAO code (4 letters, e.g. LFPG) — used for route lookup
   name: string
   lat: number
   lon: number
-}
-
-/**
- * Simulated flight — tracks a flight along a great circle route between two airports.
- * Progress is computed from departureTime + duration; position is interpolated on demand.
- */
-export interface SimulatedFlight {
-  icao24: string
-  callsign: string
-  originCountry: string
-  origin: Airport
-  destination: Airport
-  progress: number       // 0-1, position along great circle
-  departureTime: number  // backtracked epoch: Date.now() - initialProgress * duration
-  duration: number       // total flight duration in ms
 }
 
 /**
@@ -66,7 +51,6 @@ export interface MapOptions {
   showAirports: boolean
   showGraticule: boolean
   showCountryBorders: boolean
-  showFlightPaths: boolean
 }
 
 /**
@@ -80,7 +64,21 @@ export interface FlightState {
 }
 
 /** Indicates the current data source displayed to the user */
-export type DataSource = 'live' | 'simulated' | 'replay'
+export type DataSource = 'live' | 'replay' | 'routes'
+
+/**
+ * An aggregated corridor between two airports, built from the routes table.
+ * Used by the Routes mode to display intercontinental air corridors.
+ */
+export interface RouteCorridor {
+  departureIcao: string
+  arrivalIcao: string
+  departureAirport: Airport | null    // resolved via getAirportByIcao
+  arrivalAirport: Airport | null
+  flightCount: number                 // total flights on this corridor
+  callsigns: string[]                 // sample callsigns (max 5) for display
+  sampleTracks: [number, number][][]  // max 3 real trajectories [lon,lat][]
+}
 
 /** A raw position record stored in the SQLite positions table */
 export interface Position {
@@ -113,6 +111,23 @@ export interface Route {
   arrival_icao: string | null
   last_seen: number
   flight_count: number
+}
+
+/**
+ * A completed flight with full trajectory for replay mode.
+ * Combines data from the flights table, positions table, and airport DB.
+ */
+export interface CompletedFlight {
+  icao24: string
+  callsign: string
+  firstSeen: number
+  lastSeen: number
+  departureIcao: string | null
+  arrivalIcao: string | null
+  departureAirport: Airport | null   // resolved via getAirportByIcao
+  arrivalAirport: Airport | null
+  positions: [number, number][]      // [lon, lat][] from positions table
+  lastHeading: number                // heading at last recorded position
 }
 
 /** A full track record stored from OpenSky /tracks/all */

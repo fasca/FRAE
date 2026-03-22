@@ -17,8 +17,8 @@ const mockFlight: Flight = {
   lastUpdate: Date.now(),
 }
 
-const mockOrigin: Airport = { code: 'CDG', name: 'Paris Charles de Gaulle', lat: 49.01, lon: 2.55 }
-const mockDestination: Airport = { code: 'JFK', name: 'New York JFK', lat: 40.64, lon: -73.78 }
+const mockOrigin: Airport = { code: 'CDG', icao: 'LFPG', name: 'Paris Charles de Gaulle', lat: 49.01, lon: 2.55 }
+const mockDestination: Airport = { code: 'JFK', icao: 'KJFK', name: 'New York JFK', lat: 40.64, lon: -73.78 }
 
 describe('FlightInfoPanel', () => {
   it('should_render_callsign', () => {

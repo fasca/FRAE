@@ -8,7 +8,6 @@ const defaultOptions: MapOptions = {
   showAirports: true,
   showGraticule: true,
   showCountryBorders: true,
-  showFlightPaths: false,
 }
 
 const defaultProps = {
@@ -66,7 +65,6 @@ describe('ControlPanel', () => {
     expect(screen.getByLabelText('Toggle airports')).toBeDefined()
     expect(screen.getByLabelText('Toggle graticule')).toBeDefined()
     expect(screen.getByLabelText('Toggle country borders')).toBeDefined()
-    expect(screen.getByLabelText('Toggle flight trails')).toBeDefined()
   })
 
   it('should_call_onOptionsChange_with_toggled_showAirports_when_airports_toggle_clicked', () => {

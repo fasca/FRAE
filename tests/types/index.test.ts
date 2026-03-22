@@ -52,11 +52,11 @@ describe('FlightState interface', () => {
 })
 
 describe('DataSource type', () => {
-  it('should_accept_live_and_simulated_values', () => {
+  it('should_accept_live_and_replay_values', () => {
     const a: DataSource = 'live'
-    const b: DataSource = 'simulated'
+    const b: DataSource = 'replay'
     expect(a).toBe('live')
-    expect(b).toBe('simulated')
+    expect(b).toBe('replay')
   })
 })
 
@@ -66,9 +66,8 @@ describe('MapOptions interface', () => {
       showAirports: true,
       showGraticule: true,
       showCountryBorders: true,
-      showFlightPaths: false,
     }
     expect(options.showGraticule).toBe(true)
-    expect(options.showFlightPaths).toBe(false)
+    expect(options.showAirports).toBe(true)
   })
 })

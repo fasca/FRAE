@@ -31,12 +31,6 @@ describe('useOpenSkyData', () => {
     vi.unstubAllGlobals()
   })
 
-  it('should_start_with_live_data_source', () => {
-    mockFetch(200, { states: [] })
-    const { result } = renderHook(() => useOpenSkyData())
-    expect(result.current.dataSource).toBe('live')
-  })
-
   it('should_start_with_null_lastUpdate', () => {
     mockFetch(200, { states: [] })
     const { result } = renderHook(() => useOpenSkyData())
@@ -74,23 +68,25 @@ describe('useOpenSkyData', () => {
     expect(result.current.lastUpdate).not.toBeNull()
   })
 
-  it('should_switch_to_simulated_after_3_consecutive_errors', async () => {
+  it('should_keep_retrying_indefinitely_on_error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Network error')))
-    const { result } = renderHook(() => useOpenSkyData())
+    renderHook(() => useOpenSkyData())
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
 
     // First error at t=0
     act(() => { vi.advanceTimersByTime(1) })
     await act(async () => { await flushAsync(10) })
 
-    // Second error after FETCH_INTERVAL_MS
+    // Second retry after FETCH_INTERVAL_MS
     act(() => { vi.advanceTimersByTime(10_001) })
     await act(async () => { await flushAsync(10) })
 
-    // Third error → triggers setDataSource('simulated')
+    // Third retry — should still be fetching (not bailed out)
     act(() => { vi.advanceTimersByTime(10_001) })
     await act(async () => { await flushAsync(10) })
 
-    expect(result.current.dataSource).toBe('simulated')
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2)
   })
 
   it('should_use_30s_backoff_on_429', async () => {
@@ -115,44 +111,47 @@ describe('useOpenSkyData', () => {
     expect(fetchMock.mock.calls.length).toBe(2)
   })
 
-  it('should_accumulate_trails_on_fetch', async () => {
-    mockFetch(200, { states: [validState('abc123', 2.55, 49.01)] })
+  it('should_keep_retrying_on_syntax_error_from_malformed_json', async () => {
+    // Simulate a 200 response whose .json() throws SyntaxError (malformed body).
+    // This exercises the hook's catch block — which previously killed the retry loop.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.reject(new SyntaxError('Unexpected token < in JSON')),
+    }))
     const { result } = renderHook(() => useOpenSkyData())
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
 
+    // First attempt at t=0
     act(() => { vi.advanceTimersByTime(1) })
-    await flushAsync(10)
-    act(() => {})
+    await act(async () => { await flushAsync(10) })
 
-    expect(result.current.trailsRef.current.has('abc123')).toBe(true)
-    expect(result.current.trailsRef.current.get('abc123')!.length).toBeGreaterThan(0)
+    // Retry after FETCH_INTERVAL_MS
+    act(() => { vi.advanceTimersByTime(10_001) })
+    await act(async () => { await flushAsync(10) })
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2)
+    // Error state must be set (loop is alive but data is unavailable)
+    expect(result.current.error).toBe('network-error')
   })
 
-  it('should_prune_stale_icao24s_from_trails', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true, status: 200,
-        json: () => Promise.resolve({ states: [validState('abc123'), validState('xyz999')] }),
-      })
-      .mockResolvedValue({
-        ok: true, status: 200,
-        json: () => Promise.resolve({ states: [validState('abc123')] }),
-      })
-    vi.stubGlobal('fetch', fetchMock)
-
+  it('should_set_error_on_http_failure_and_clear_on_success', async () => {
+    // First call: HTTP 503
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, json: () => Promise.resolve(null) })
+      .mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve({ states: [] }) })
+    )
     const { result } = renderHook(() => useOpenSkyData())
 
-    // First fetch: both icao24s present
+    // Trigger first (failing) fetch
     act(() => { vi.advanceTimersByTime(1) })
-    await flushAsync(10)
-    act(() => {})
-    expect(result.current.trailsRef.current.has('xyz999')).toBe(true)
+    await act(async () => { await flushAsync(10) })
+    expect(result.current.error).toBe('HTTP 503')
 
-    // Second fetch: only abc123
+    // Trigger retry — should succeed and clear error
     act(() => { vi.advanceTimersByTime(10_001) })
-    await flushAsync(10)
-    act(() => {})
-    expect(result.current.trailsRef.current.has('xyz999')).toBe(false)
-    expect(result.current.trailsRef.current.has('abc123')).toBe(true)
+    await act(async () => { await flushAsync(10) })
+    expect(result.current.error).toBeNull()
   })
 
   it('should_abort_fetch_on_unmount', () => {

@@ -78,7 +78,7 @@ export type OpenSkyFetchResult =
   | { ok: true; flights: Flight[]; timestamp: number }
   | { ok: false; error: string }
 
-const OPENSKY_API_URL = 'https://opensky-network.org/api/states/all'
+const OPENSKY_API_URL = '/api/opensky/states'
 
 /**
  * Fetch live flight data from OpenSky Network.

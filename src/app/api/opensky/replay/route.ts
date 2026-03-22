@@ -1,70 +1,69 @@
 /**
- * GET /api/opensky/replay?date=YYYY-MM-DD&time=X
- * Returns flights active at timestamp X on given date, with their trails.
- * time=X is a Unix timestamp (seconds) within the day.
- * Trail window: 20 minutes before replayTime.
+ * GET /api/opensky/replay?date=YYYY-MM-DD
+ * Returns all completed flights for the given day with their full trajectories.
+ * Positions are fetched in one batch then matched per flight.
+ * Airports are resolved server-side for departure/arrival.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getPositionsByTimeRange } from '@/lib/db'
+import { getFlightsByDay, getPositionsByTimeRange } from '@/lib/db'
+import { getAirportByIcao } from '@/lib/airports'
+import { filterValidFlights, deduplicateFlights, matchPositionsToFlight } from '@/lib/replay'
+import type { CompletedFlight } from '@/types/index'
 
-const TRAIL_WINDOW_SEC = 20 * 60  // 20 minutes of history per flight in replay
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export async function GET(request: NextRequest) {
-  const dateStr    = request.nextUrl.searchParams.get('date')
-  const timeParam  = request.nextUrl.searchParams.get('time')
-
-  if (!dateStr || !timeParam) {
-    return NextResponse.json({ error: 'date and time params required' }, { status: 400 })
+  const dateStr = request.nextUrl.searchParams.get('date')
+  if (!dateStr || !DATE_RE.test(dateStr)) {
+    return NextResponse.json({ error: 'date param required (YYYY-MM-DD)' }, { status: 400 })
   }
 
-  const replayTime = parseInt(timeParam, 10)
-  if (isNaN(replayTime)) {
-    return NextResponse.json({ error: 'time must be a Unix timestamp' }, { status: 400 })
-  }
+  const dayStart = Math.floor(new Date(dateStr + 'T00:00:00Z').getTime() / 1000)
+  const dayEnd   = dayStart + 86400
 
-  const trailStart = replayTime - TRAIL_WINDOW_SEC
+  // Step 1: fetch + filter + deduplicate flight records
+  const raw     = getFlightsByDay(dayStart, dayEnd)
+  const valid   = filterValidFlights(raw)
+  const unique  = deduplicateFlights(valid)
 
-  // Fetch all positions in the trail window
-  const positions = getPositionsByTimeRange(trailStart, replayTime)
+  // Step 2: fetch all positions for the day in one query (1h buffer for midnight-crossing flights)
+  const allPositions = getPositionsByTimeRange(dayStart - 3600, dayEnd + 3600)
 
-  // Group by icao24
-  const byIcao24 = new Map<string, typeof positions>()
-  for (const p of positions) {
-    const arr = byIcao24.get(p.icao24) ?? []
+  // Step 3: group positions by icao24 for O(1) per-flight lookup
+  const posByIcao24 = new Map<string, typeof allPositions>()
+  for (const p of allPositions) {
+    const arr = posByIcao24.get(p.icao24) ?? []
     arr.push(p)
-    byIcao24.set(p.icao24, arr)
+    posByIcao24.set(p.icao24, arr)
   }
 
-  // Build response: for each aircraft, find latest position + full trail
-  const flights: Array<{
-    icao24: string
-    callsign: string | null
-    lon: number
-    lat: number
-    altitude: number
-    heading: number
-    velocity: number
-    trail: [number, number][]
-  }> = []
+  // Step 4: build CompletedFlight objects
+  const flights: CompletedFlight[] = unique.map(f => {
+    const firstSeen = f.first_seen!
+    const lastSeen  = f.last_seen!
+    const callsign  = f.callsign!
 
-  for (const [icao24, pts] of byIcao24) {
-    if (pts.length === 0) continue
-    // Latest position = current aircraft state
-    const latest = pts[pts.length - 1]
-    const trail: [number, number][] = pts.map(p => [p.lon, p.lat])
+    const icaoPositions   = posByIcao24.get(f.icao24) ?? []
+    const flightPositions = matchPositionsToFlight(icaoPositions, f.icao24, firstSeen, lastSeen)
+    const positions: [number, number][] = flightPositions.map(p => [p.lon, p.lat])
 
-    flights.push({
-      icao24,
-      callsign:  latest.callsign ?? null,
-      lon:       latest.lon,
-      lat:       latest.lat,
-      altitude:  latest.altitude ?? 0,
-      heading:   latest.heading  ?? 0,
-      velocity:  latest.velocity ?? 0,
-      trail,
-    })
-  }
+    const lastPos     = flightPositions.length > 0 ? flightPositions[flightPositions.length - 1] : null
+    const lastHeading = lastPos?.heading ?? 0
 
-  return NextResponse.json({ replayTime, flightCount: flights.length, flights })
+    return {
+      icao24:           f.icao24,
+      callsign,
+      firstSeen,
+      lastSeen,
+      departureIcao:    f.departure_icao ?? null,
+      arrivalIcao:      f.arrival_icao   ?? null,
+      departureAirport: f.departure_icao ? (getAirportByIcao(f.departure_icao) ?? null) : null,
+      arrivalAirport:   f.arrival_icao   ? (getAirportByIcao(f.arrival_icao)   ?? null) : null,
+      positions,
+      lastHeading,
+    }
+  })
+
+  return NextResponse.json({ date: dateStr, flightCount: flights.length, flights })
 }

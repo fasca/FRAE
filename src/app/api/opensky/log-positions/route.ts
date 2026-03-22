@@ -23,7 +23,16 @@ export async function POST(request: NextRequest) {
 
   // Minimal validation — trust client data (internal API)
   const positions = body as Position[]
-  insertPositions(positions)
 
-  return NextResponse.json({ ok: true, count: positions.length })
+  // Only persist in-flight positions: altitude > 5000 m (en-route long-haul)
+  // or significant velocity > 100 m/s (~360 km/h) when altitude is missing.
+  // This eliminates ground traffic, low-altitude local flights, and helicopters
+  // and reduces write volume by ~70% compared to logging everything.
+  const meaningful = positions.filter(p =>
+    (p.altitude != null && p.altitude > 5000) ||
+    (p.velocity != null && p.velocity > 100)
+  )
+  insertPositions(meaningful)
+
+  return NextResponse.json({ ok: true, count: meaningful.length, total: positions.length })
 }

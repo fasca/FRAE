@@ -6,13 +6,15 @@ import ControlPanel from './ControlPanel'
 import StatsBar from './StatsBar'
 import FlightInfoPanel from './FlightInfoPanel'
 import ReplayControls from './ReplayControls'
-import type { ProjectionCenter, MapOptions, Flight } from '@/types/index'
+import CorridorInfoPanel from './CorridorInfoPanel'
+import type { ProjectionCenter, MapOptions, Flight, Airport } from '@/types/index'
 import { PREDEFINED_CENTERS, DEFAULT_SCALE } from '@/lib/projection'
-import { AIRPORTS } from '@/lib/airports'
+import { getVisibleAirports } from '@/lib/airport-render'
 import { useOpenSkyData } from '@/hooks/useOpenSkyData'
 import { useFlightTrack } from '@/hooks/useFlightTrack'
 import { useFlightRoutes } from '@/hooks/useFlightRoutes'
-import { useReplayData, replayFlightToFlight } from '@/hooks/useReplayData'
+import { useReplayData } from '@/hooks/useReplayData'
+import { useRoutesData } from '@/hooks/useRoutesData'
 import { filterFlights } from '@/lib/flights'
 
 export default function FlightRadar() {
@@ -22,38 +24,29 @@ export default function FlightRadar() {
     showAirports: true,
     showGraticule: true,
     showCountryBorders: true,
-    showFlightPaths: false,
   })
-  const [selectedIcao24, setSelectedIcao24] = useState<string | null>(null)
-  const [filterQuery, setFilterQuery]       = useState('')
-  const [replayMode, setReplayMode]         = useState(false)
-  const [replayDate, setReplayDate]         = useState<Date | null>(null)
+  const [selectedIcao24, setSelectedIcao24]       = useState<string | null>(null)
+  const [filterQuery, setFilterQuery]             = useState('')
+  const [replayMode, setReplayMode]               = useState(false)
+  const [replayDate, setReplayDate]               = useState<Date | null>(null)
+  const [replaySelectedIdx, setReplaySelectedIdx] = useState<number | null>(null)
+  const [routesMode, setRoutesMode]               = useState(false)
+  const [routesSelectedIdx, setRoutesSelectedIdx] = useState<number | null>(null)
   const exportRef = useRef<(() => void) | null>(null)
 
   // Live data
-  const { flightStatesRef, flights, trailsRef, dataSource, lastUpdate } = useOpenSkyData()
+  const { flightStatesRef, flights, lastUpdate, error: openSkyError } = useOpenSkyData()
 
-  // Full track from DB / OpenSky /tracks when a flight is selected
-  const { fullTrack } = useFlightTrack(selectedIcao24)
-
-  // Route lookup (origin + destination airports)
-  const selectedFlight = flights.find(f => f.icao24 === selectedIcao24) ?? null
-  const { originAirport, destinationAirport } = useFlightRoutes(
-    selectedFlight?.callsign ?? null
-  )
+  // Full track + route for selected live flight (hooks must always be called)
+  const { fullTrack }   = useFlightTrack(replayMode ? null : selectedIcao24)
+  const selectedFlight  = replayMode ? null : (flights.find(f => f.icao24 === selectedIcao24) ?? null)
+  const { originAirport, destinationAirport } = useFlightRoutes(selectedFlight?.callsign ?? null)
 
   // Replay data
-  const {
-    replayFlights,
-    replayTime,
-    isPlaying,
-    speed,
-    loading: replayLoading,
-    setReplayTime,
-    play,
-    pause,
-    setSpeed,
-  } = useReplayData(replayMode ? replayDate : null)
+  const { completedFlights, loading: replayLoading } = useReplayData(replayMode ? replayDate : null)
+
+  // Routes data
+  const { corridors } = useRoutesData(routesMode)
 
   const handleFlightSelect = useCallback((icao24: string | null) => {
     setSelectedIcao24(icao24)
@@ -63,25 +56,45 @@ export default function FlightRadar() {
     setOptions(newOptions)
   }, [])
 
-  // In replay mode: convert ReplayFlight → Flight for renderer compatibility
-  const replayAsFlights: readonly Flight[] = useMemo(
-    () => replayFlights.map(replayFlightToFlight),
-    [replayFlights]
-  )
+  const visibleAirports = useMemo(() => getVisibleAirports(scale), [scale])
 
-  // Build replay trails map (useMemo avoids creating a new Map every render)
-  const replayTrails = useMemo(
-    () => new Map(replayFlights.map(rf => [rf.icao24, rf.trail])),
-    [replayFlights]
+  const displayFlights  = useMemo(
+    () => replayMode ? [] : filterFlights(flights, filterQuery),
+    [replayMode, flights, filterQuery]
   )
-
-  const displayFlights = replayMode ? replayAsFlights : filterFlights(flights, filterQuery)
-  const displaySource   = replayMode ? 'replay' : dataSource
+  const displaySource   = routesMode ? ('routes' as const) : replayMode ? ('replay' as const) : ('live' as const)
   const displaySelected = replayMode ? null : selectedIcao24
 
-  const panelFlight = replayMode
-    ? null
-    : (displayFlights.find(f => f.icao24 === selectedIcao24) ?? null)
+  // Panel flight: live → selected flight; replay → CompletedFlight at selected index
+  const panelFlight: Flight | null = useMemo(() => {
+    if (replayMode) {
+      if (replaySelectedIdx === null) return null
+      const cf = completedFlights[replaySelectedIdx]
+      if (!cf) return null
+      const lastPos = cf.positions.length > 0 ? cf.positions[cf.positions.length - 1] : [0, 0]
+      return {
+        icao24: cf.icao24, callsign: cf.callsign, originCountry: '',
+        longitude: lastPos[0], latitude: lastPos[1],
+        altitude: 0, velocity: 0, heading: cf.lastHeading,
+        verticalRate: 0, onGround: false, lastUpdate: cf.lastSeen * 1000,
+      }
+    }
+    return displayFlights.find(f => f.icao24 === selectedIcao24) ?? null
+  }, [replayMode, replaySelectedIdx, completedFlights, displayFlights, selectedIcao24])
+
+  // Panel airports: replay gets them from CompletedFlight, live from useFlightRoutes
+  const panelOrigin: Airport | undefined = replayMode
+    ? (replaySelectedIdx !== null ? completedFlights[replaySelectedIdx]?.departureAirport ?? undefined : undefined)
+    : (originAirport ?? undefined)
+
+  const panelDest: Airport | undefined = replayMode
+    ? (replaySelectedIdx !== null ? completedFlights[replaySelectedIdx]?.arrivalAirport ?? undefined : undefined)
+    : (destinationAirport ?? undefined)
+
+  const flightsWithPositions = useMemo(
+    () => completedFlights.filter(cf => cf.positions.length > 0).length,
+    [completedFlights]
+  )
 
   return (
     <div className="flex flex-col h-full w-full bg-[#030a14] relative">
@@ -91,21 +104,28 @@ export default function FlightRadar() {
         options={options}
         filterQuery={filterQuery}
         replayMode={replayMode}
+        routesMode={routesMode}
         onCenterChange={setCenter}
         onScaleChange={setScale}
         onOptionsChange={handleOptionsChange}
         onFilterChange={setFilterQuery}
         onExport={() => exportRef.current?.()}
-        onReplayToggle={() => setReplayMode(m => !m)}
+        onReplayToggle={() => {
+          setReplayMode(m => { if (!m) { setRoutesMode(false); setRoutesSelectedIdx(null) }; return !m })
+          setReplaySelectedIdx(null)
+        }}
+        onRoutesToggle={() => {
+          setRoutesMode(m => { if (!m) { setReplayMode(false); setReplaySelectedIdx(null) }; return !m })
+          setRoutesSelectedIdx(null)
+        }}
       />
       <MapCanvas
         center={center}
         scale={scale}
         options={options}
         flights={displayFlights}
-        airports={AIRPORTS}
-        // eslint-disable-next-line react-hooks/refs
-        trails={replayMode ? replayTrails : trailsRef.current}
+        airports={visibleAirports}
+        trails={new Map()}
         selectedIcao24={displaySelected}
         onScaleChange={setScale}
         onFlightSelect={handleFlightSelect}
@@ -115,30 +135,37 @@ export default function FlightRadar() {
         exportRef={exportRef}
         fullTrack={replayMode ? null : fullTrack}
         destinationAirport={replayMode ? null : destinationAirport}
+        completedFlights={replayMode ? completedFlights : undefined}
+        replaySelectedIndex={replayMode ? replaySelectedIdx : null}
+        onReplayFlightSelect={replayMode ? setReplaySelectedIdx : undefined}
+        corridors={routesMode ? corridors : undefined}
+        routesSelectedIndex={routesMode ? routesSelectedIdx : null}
+        onRoutesCorridorSelect={routesMode ? setRoutesSelectedIdx : undefined}
       />
 
-      {panelFlight && selectedIcao24 && (
+      {panelFlight && (
         <FlightInfoPanel
           flight={panelFlight}
-          origin={originAirport ?? undefined}
-          destination={destinationAirport ?? undefined}
-          onClose={() => handleFlightSelect(null)}
+          origin={panelOrigin}
+          destination={panelDest}
+          onClose={() => replayMode ? setReplaySelectedIdx(null) : handleFlightSelect(null)}
+        />
+      )}
+
+      {routesMode && routesSelectedIdx !== null && corridors[routesSelectedIdx] && (
+        <CorridorInfoPanel
+          corridor={corridors[routesSelectedIdx]}
+          onClose={() => setRoutesSelectedIdx(null)}
         />
       )}
 
       {replayMode && (
         <ReplayControls
           replayDate={replayDate}
-          replayTime={replayTime}
-          isPlaying={isPlaying}
-          speed={speed}
-          flightCount={replayFlights.length}
+          flightCount={completedFlights.length}
+          flightsWithPositions={flightsWithPositions}
           loading={replayLoading}
-          onDateChange={setReplayDate}
-          onTimeChange={setReplayTime}
-          onPlay={play}
-          onPause={pause}
-          onSpeedChange={setSpeed}
+          onDateChange={date => { setReplayDate(date); setReplaySelectedIdx(null) }}
           onClose={() => setReplayMode(false)}
         />
       )}
@@ -146,11 +173,12 @@ export default function FlightRadar() {
       <StatsBar
         center={center}
         scale={scale}
-        flightCount={displayFlights.length}
+        flightCount={routesMode ? corridors.length : replayMode ? completedFlights.length : displayFlights.length}
         lastUpdate={lastUpdate}
         dataSource={displaySource}
         replayMode={replayMode}
-        replayTime={replayMode ? replayTime : null}
+        replayTime={null}
+        openSkyError={replayMode ? null : openSkyError}
       />
     </div>
   )

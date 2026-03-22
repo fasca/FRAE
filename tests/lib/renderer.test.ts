@@ -77,7 +77,7 @@ function makeMockProjectionWithStream(): GeoProjection {
   return fn as unknown as GeoProjection
 }
 
-const mockAirport: Airport = { code: 'CDG', name: 'Paris Charles de Gaulle', lat: 49.01, lon: 2.55 }
+const mockAirport: Airport = { code: 'CDG', icao: 'LFPG', name: 'Paris Charles de Gaulle', lat: 49.01, lon: 2.55 }
 const mockFlight: Flight = {
   icao24: 'abc123',
   callsign: 'AF1234',
@@ -136,8 +136,7 @@ describe('drawStaticLayer', () => {
     const projection = makeMockProjectionWithStream()
     const emptyWorld = { type: 'FeatureCollection', features: [] }
     const options: MapOptions = {
-      showAirports: true, showGraticule: false, showCountryBorders: false, showFlightPaths: false,
-    }
+      showAirports: true, showGraticule: false, showCountryBorders: false,     }
     drawStaticLayer(ctx, projection, emptyWorld as unknown as import('d3-geo').GeoPermissibleObjects, 800, 600, options)
     expect(ctx.stroke).not.toHaveBeenCalled()
   })
@@ -147,8 +146,7 @@ describe('drawStaticLayer', () => {
     const projection = makeMockProjectionWithStream()
     const emptyWorld = { type: 'FeatureCollection', features: [] }
     const options: MapOptions = {
-      showAirports: true, showGraticule: true, showCountryBorders: false, showFlightPaths: false,
-    }
+      showAirports: true, showGraticule: true, showCountryBorders: false,     }
     drawStaticLayer(ctx, projection, emptyWorld as unknown as import('d3-geo').GeoPermissibleObjects, 800, 600, options)
     expect(ctx.stroke).toHaveBeenCalled()
   })
@@ -201,13 +199,22 @@ describe('drawFlightTrails', () => {
     expect(drawFlightTrails).toBeInstanceOf(Function)
     expect(drawFlightTrails.length).toBe(3)
   })
-  it('should_draw_trail_points_for_each_flight', () => {
+  it('should_draw_trail_points_for_selected_flight', () => {
+    const ctx = makeMockCtx()
+    const projection = makeMockProjection()
+    const trails = new Map<string, [number, number][]>()
+    trails.set('abc123', [[2.55, 49.01], [2.56, 49.02]])
+    drawFlightTrails(ctx, projection, trails, 'abc123')
+    expect(ctx.arc).toHaveBeenCalled()
+  })
+
+  it('should_not_draw_when_no_flight_selected', () => {
     const ctx = makeMockCtx()
     const projection = makeMockProjection()
     const trails = new Map<string, [number, number][]>()
     trails.set('abc123', [[2.55, 49.01], [2.56, 49.02]])
     drawFlightTrails(ctx, projection, trails)
-    expect(ctx.arc).toHaveBeenCalled()
+    expect(ctx.arc).not.toHaveBeenCalled()
   })
 })
 
@@ -269,8 +276,7 @@ describe('drawDynamicLayers', () => {
       showAirports: true,
       showGraticule: true,
       showCountryBorders: true,
-      showFlightPaths: true,
-    }
+          }
     drawDynamicLayers(ctx, projection, [mockAirport], [mockFlight], trails, null, options)
     expect(ctx.save).toHaveBeenCalled()
   })
@@ -282,8 +288,7 @@ describe('drawDynamicLayers', () => {
       showAirports: false,
       showGraticule: true,
       showCountryBorders: true,
-      showFlightPaths: true,
-    }
+          }
     drawDynamicLayers(ctx, projection, [mockAirport], [mockFlight], trails, null, options)
     // fillText for airport label should NOT be called
     const fillTextCalls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls
